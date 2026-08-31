@@ -1,0 +1,45 @@
+<Project>
+
+  <!--
+    Centralized build settings. Values defined here apply to every project in
+    the solution; individual .csproj files only override when they need to
+    diverge. Keeps the "best-practice baseline" in one place.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>All</AnalysisMode>
+  </PropertyGroup>
+
+  <!--
+    Generate XML documentation by default. Test projects opt out by
+    setting <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    in their csproj. (We can't gate this on $(IsPackable) here because
+    the SDK locks in its decision before Directory.Build.targets runs.)
+  -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Lock-file based version pinning. The lock file (packages.lock.json)
+    captures exactly the resolved package versions and is committed to git,
+    so any clone restores the same dependency graph. RestoreLockedMode
+    fails the build if the lock file is out of sync with the csproj — only
+    enabled in CI so local `dotnet add package` keeps working.
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+</Project>

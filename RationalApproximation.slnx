@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RationalApproximation.Tests/RationalApproximation.Tests.csproj" />
+  <Project Path="RationalApproximation/RationalApproximation.csproj" />
+</Solution>

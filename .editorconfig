@@ -1,0 +1,137 @@
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# C# files
+[*.cs]
+indent_size = 4
+
+# Project / build files
+[*.{csproj,props,targets,slnx,xml}]
+indent_size = 2
+
+# JSON / config
+[*.{json,yml,yaml}]
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+
+##############################################################################
+# C# language and code-style rules
+##############################################################################
+
+[*.cs]
+
+# 'this.' and 'Me.' qualifiers
+dotnet_style_qualification_for_field    = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method   = false:warning
+dotnet_style_qualification_for_event    = false:warning
+
+# Language keywords vs framework type names for type references
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_predefined_type_for_member_access             = true:warning
+
+# Modifier preferences
+dotnet_style_require_accessibility_modifiers = always:warning
+csharp_preferred_modifier_order              = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async:warning
+dotnet_style_readonly_field                  = true:warning
+
+# Expression-level preferences
+dotnet_style_object_initializer                  = true:suggestion
+dotnet_style_collection_initializer              = true:suggestion
+dotnet_style_explicit_tuple_names                = true:warning
+dotnet_style_prefer_inferred_tuple_names         = true:suggestion
+dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
+dotnet_style_prefer_auto_properties              = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:suggestion
+dotnet_style_prefer_conditional_expression_over_return     = true:suggestion
+
+# Null-checking preferences
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation    = true:suggestion
+
+# 'var' preferences
+csharp_style_var_for_built_in_types    = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere             = false:suggestion
+
+# Expression-bodied members
+csharp_style_expression_bodied_methods      = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors = when_on_single_line:suggestion
+csharp_style_expression_bodied_operators    = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties   = true:suggestion
+csharp_style_expression_bodied_indexers     = true:suggestion
+csharp_style_expression_bodied_accessors    = true:suggestion
+
+# Pattern matching
+csharp_style_pattern_matching_over_is_with_cast_check = true:warning
+csharp_style_pattern_matching_over_as_with_null_check = true:warning
+
+# Null-checking
+csharp_style_throw_expression                = true:suggestion
+csharp_style_conditional_delegate_call       = true:warning
+
+# Code-block preferences
+csharp_prefer_braces                                  = when_multiline:suggestion
+csharp_style_namespace_declarations                   = file_scoped:warning
+csharp_style_prefer_method_group_conversion           = true:suggestion
+csharp_style_prefer_top_level_statements              = false:suggestion
+
+# Using directives
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+##############################################################################
+# Analyzer severities
+##############################################################################
+
+# CA1062: Validate arguments of public methods.
+# We use ArgumentNullException.ThrowIfNull / pattern checks; this rule is noisy
+# for value types and operator overloads where validation belongs in the ctor.
+dotnet_diagnostic.CA1062.severity = none
+
+# CA1303: Do not pass literals as localized parameters.
+# Not a localized library.
+dotnet_diagnostic.CA1303.severity = none
+
+# CA1716: Identifiers should not match keywords.
+# Math vocabulary doesn't track CLS keyword reservations.
+dotnet_diagnostic.CA1716.severity = none
+
+# CA1815: Override equals and operator equals on value types.
+# Enforced at the type level by IEquatable<T>; analyzer handled by code.
+# Default severity (warning -> error) is fine.
+
+# IDE0290: Use primary constructor.
+# Stylistic preference; primary constructors aren't always clearer.
+dotnet_diagnostic.IDE0290.severity = suggestion
+
+# CA1707: Identifiers should not contain underscores.
+# Test method names use underscores by convention (Method_Condition_Result).
+# CA1508: Avoid dead conditional code.
+# Tests intentionally exercise trivially-true / trivially-false conditions
+# to verify operator and method behavior under known inputs.
+[**/*Tests.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1508.severity = none
+
+# CA1515: Types can be made internal.
+# xunit v2 only discovers public test classes, so complying with this rule does
+# not fail the build - it discovers nothing and reports green. That failure mode
+# is why the rule is off here rather than fixed.
+#
+# Measured 2026-08-30 on SDK 10.0.400: CA1515 does not currently fire on a
+# [Fact]-bearing class even at severity = error, so today this line changes
+# nothing. It is kept as a guard, not as a live suppression - the analyzer's
+# exemption keys off recognisable test attributes, which a [CollectionDefinition]
+# marker, a shared fixture, or a theory-data holder does not carry.
+dotnet_diagnostic.CA1515.severity = none
