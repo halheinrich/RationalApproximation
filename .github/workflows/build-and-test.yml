@@ -1,0 +1,132 @@
+# Build-and-test gate for RationalApproximation.
+#
+# THE PROBLEM THIS WORKFLOW EXISTS TO SOLVE
+#
+# This repository does not build standalone. Per the umbrella's ruling that
+# intra-umbrella edges are ProjectReference, the library references
+#
+#   ..\..\BigRationalLibrary\BigRationalLibrary\BigRationalLibrary.csproj
+#
+# which escapes the repo. A checkout of this repository alone cannot restore,
+# let alone build. A workflow that ignored that would be the one failure mode
+# this project cares most about: a gate sitting green while compiling nothing.
+#
+# WHAT THIS DOES INSTEAD
+#
+# It reconstructs the minimum of the umbrella layout that the reference needs -
+# this repo and BigRationalLibrary as siblings - by checking out both into
+# sibling paths in the workspace:
+#
+#   $GITHUB_WORKSPACE/
+#     BigRationalLibrary/          <- halheinrich/BigRationalLibrary @ main
+#     RationalApproximation/       <- the commit under test
+#
+# Two alternatives were weighed and rejected:
+#
+#   - A submodule-aware checkout of halheinrich/Math. The umbrella is private,
+#     so it needs a cross-repo PAT this repo does not have. Decisively, and
+#     independent of the secret: the umbrella PINS a submodule SHA, so a push
+#     to this repo's main would check out the pinned RationalApproximation
+#     rather than the commit that triggered the run. The gate would compile the
+#     wrong code and report on it.
+#
+#   - An inert workflow, deferred until per-repo CI is designed. That is the
+#     green-while-building-nothing failure mode with extra steps, and as the
+#     template steps 5, 6 and 8 propagate it would teach nothing.
+#
+# THE ONE COMPROMISE, STATED PLAINLY
+#
+# BigRationalLibrary is taken at main, not at the SHA the umbrella pins. This
+# workflow cannot read that pin without the private umbrella. So this gate
+# tests integration against BigRational's tip, which can go red for a reason
+# outside this repo. That is deliberate: BigRational is breaking its surface at
+# 0.1.0-preview1, and a consumer-side gate that notices immediately is worth
+# more than one that agrees with a stale pin. When a red build traces to
+# BigRational rather than to this commit, the fix is upstream.
+#
+# TEMPLATE NOTES FOR STEPS 5, 6 AND 8
+#
+# RealConstants checks out two siblings (BigRationalLibrary,
+# RationalApproximation); Zeta checks out three. Members that still build
+# standalone - ContinuedFractions until step 7 - need only their own checkout
+# and can drop the sibling steps entirely. Debug only; Release remains
+# unmeasured across the umbrella (tracked as #7) and is not silently decided
+# here.
+
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: RationalApproximation
+
+    steps:
+      - name: Checkout RationalApproximation
+        uses: actions/checkout@v6
+        with:
+          path: RationalApproximation
+
+      - name: Checkout BigRationalLibrary (the escaping ProjectReference target)
+        uses: actions/checkout@v6
+        with:
+          repository: halheinrich/BigRationalLibrary
+          ref: main
+          path: BigRationalLibrary
+
+      # Fail loudly and specifically if the reconstructed layout is wrong,
+      # rather than letting it surface as an opaque restore error.
+      - name: Verify the sibling layout the ProjectReference needs
+        run: |
+          target="../BigRationalLibrary/BigRationalLibrary/BigRationalLibrary.csproj"
+          if [ ! -f "$target" ]; then
+            echo "::error::$target is missing - the sibling checkout did not land where the ProjectReference expects."
+            exit 1
+          fi
+          echo "Found $target"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      # ContinuousIntegrationBuild=true turns on RestoreLockedMode, which
+      # Directory.Build.props gates on exactly that property: restore then fails
+      # if any committed packages.lock.json is out of sync with its csproj.
+      # It is carried through build and test so every stage agrees.
+      - name: Restore
+        run: dotnet restore RationalApproximation.slnx -p:ContinuousIntegrationBuild=true
+
+      # No warnings-as-errors flag here on purpose. Directory.Build.props already
+      # sets TreatWarningsAsErrors with AnalysisMode=All; the workflow must not
+      # weaken that, and must not restate it either - one spelling of the rule.
+      - name: Build
+        run: dotnet build RationalApproximation.slnx --no-restore -p:ContinuousIntegrationBuild=true
+
+      # The guard: a suite that discovers nothing must not read as a pass.
+      # This is the same failure mode the CA1515 suppression in .editorconfig
+      # guards against, checked here at the level that actually reports green.
+      - name: Test
+        run: |
+          set -o pipefail
+          dotnet test RationalApproximation.slnx --no-build --nologo \
+            -p:ContinuousIntegrationBuild=true | tee test-output.txt
+          if ! grep -Eq 'Passed:[[:space:]]+[1-9][0-9]*' test-output.txt; then
+            echo "::error::The test run reported no passing tests. Refusing to report green."
+            exit 1
+          fi
