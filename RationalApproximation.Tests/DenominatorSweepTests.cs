@@ -31,42 +31,13 @@ public class DenominatorSweepTests
         Approximation.Exact(Ratio(-8, 5)),
     ];
 
-    private const int CandidateCap = 5000;
-    private static readonly TimeSpan SearchBudget = TimeSpan.FromSeconds(10);
-    private static volatile bool searchOverran;
-
     /// <summary>
-    /// Runs a search to completion, bounded twice.
+    /// Runs a search to completion under the shared bounds. The reasoning for bounding at all is
+    /// in <see cref="BoundedSearch"/>, which is where it lives now that a second test file needs
+    /// it too - one hang guard, not two.
     /// </summary>
-    /// <remarks>
-    /// A defective search fails in two ways that inspecting its output cannot catch, because
-    /// there is no output to inspect: it can yield improvements forever, or spin without yielding
-    /// at all. Either way an unbounded test <i>hangs</i>, and a hanging test does not fail - it
-    /// reports nothing and burns the CI job's whole timeout, which is the same
-    /// silence-reads-as-success failure this project exists to avoid. The count cap catches the
-    /// first mode deterministically; the time budget catches the second, and latches so that one
-    /// abandoned thread is the worst case rather than one per assertion.
-    /// </remarks>
-    private static List<RationalCandidate> Run(Approximation enclosure)
-    {
-        Assert.False(searchOverran, "An earlier search overran its budget; not starting another.");
-
-        List<RationalCandidate>? candidates = null;
-        Task task = Task.Run(() => candidates = [.. new DenominatorSweep().Search(enclosure).Take(CandidateCap)]);
-
-        if (!task.Wait(SearchBudget))
-        {
-            searchOverran = true;
-            Assert.Fail(Inv($"The search did not finish within {SearchBudget.TotalSeconds} seconds for {enclosure.Value}."));
-        }
-
-        Assert.NotNull(candidates);
-        Assert.True(
-            candidates!.Count < CandidateCap,
-            Inv($"The search yielded {CandidateCap} candidates without terminating for {enclosure.Value}."));
-
-        return candidates!;
-    }
+    private static List<RationalCandidate> Run(Approximation enclosure) =>
+        BoundedSearch.RunToCompletion(new DenominatorSweep(), enclosure);
 
     // ---------- the least-height claim, against an independent oracle ----------
 
