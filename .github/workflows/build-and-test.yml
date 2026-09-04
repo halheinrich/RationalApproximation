@@ -72,6 +72,23 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    # A HANG IS NOT A FAILURE, and this is the outer half of that guard. The
+    # test project's own BoundedSearch catches a search that spins inside the
+    # process; the Test step's grep catches a suite that discovers nothing and
+    # reports green. Neither fires if the job never reports at all - a wedged
+    # restore, a hung runner, a defect that deadlocks before xunit is reached -
+    # and GitHub's default job timeout is 360 minutes, so silence would burn six
+    # hours before anything went red.
+    #
+    # Ten minutes. The four runs of this workflow to date took 33, 37, 38 and 46
+    # seconds end to end, so this is over an order of magnitude of headroom: it
+    # absorbs a cold NuGet restore, an uncached SDK install and a slow runner
+    # without ever being the reason a legitimate run goes red, while turning a
+    # genuine hang into a red mark in minutes rather than hours. It is not a
+    # performance budget, and it must not be tightened into one - a timeout that
+    # trips on a slow-but-correct run teaches people to ignore it.
+    timeout-minutes: 10
+
     defaults:
       run:
         working-directory: RationalApproximation

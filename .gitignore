@@ -15,8 +15,10 @@ TestResults/
 *.coverage
 *.coveragexml
 
-# Discovery hunt output (regenerated each run)
-hunt-output*.txt
+# The build-and-test workflow's Test step tees the run's output here, at the
+# checkout root, so it can grep it for a passing count. Harmless on a runner,
+# an untracked file for anyone reproducing the steps locally.
+test-output.txt
 
 # NuGet packages
 *.nupkg
@@ -25,3 +27,7 @@ hunt-output*.txt
 # OS files
 Thumbs.db
 .DS_Store
+
+# Local agent-harness settings. Per-machine and per-operator, not this repo's
+# to carry.
+.claude/
