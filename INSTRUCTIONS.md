@@ -410,10 +410,16 @@ iterations yields an empty matrix, which is honestly empty rather than an error.
   it would discover nothing and report green, which is why the rule is
   suppressed rather than satisfied. It is kept as a standing guard even where
   the analyzer does not currently fire.
-- **CI restores in locked mode.** `Directory.Build.props` gates
-  `RestoreLockedMode` on `ContinuousIntegrationBuild`, which the workflow passes
-  to every stage — so adding or bumping a package means committing the updated
-  `packages.lock.json`, or CI fails at restore while local restore still works.
+- **Restore runs in locked mode everywhere, local as well as CI.**
+  `Directory.Build.props` sets `RestoreLockedMode` unconditionally, so adding or
+  bumping a package fails restore instead of quietly updating
+  `packages.lock.json`. Recover with
+  `dotnet restore -p:RestoreForceEvaluate=true` and commit the regenerated lock;
+  `dotnet add package` will fail until you do. It was gated on
+  `ContinuousIntegrationBuild` until #29, which the workflow still passes to
+  every stage. What locked mode does *not* cover — a version arriving through a
+  `ProjectReference` rather than a `PackageReference` — is recorded in
+  `Directory.Build.props`.
 
 ## Subproject-internal next steps
 

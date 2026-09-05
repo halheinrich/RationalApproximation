@@ -33,13 +33,48 @@
   <!--
     Lock-file based version pinning. The lock file (packages.lock.json)
     captures exactly the resolved package versions and is committed to git,
-    so any clone restores the same dependency graph. RestoreLockedMode
-    fails the build if the lock file is out of sync with the csproj — only
-    enabled in CI so local `dotnet add package` keeps working.
+    so any clone restores the same dependency graph. RestoreLockedMode fails
+    the restore if the lock file is out of sync with the csproj.
+
+    Unconditional, deliberately — and here that overrides a stated decision
+    rather than waking a gate that never fired. This was gated on
+    ContinuousIntegrationBuild, and unlike the other members carrying this
+    file, this repo has a workflow that sets it: build-and-test.yml passes
+    -p:ContinuousIntegrationBuild=true on restore, build and test, at lines
+    130, 136 and 145. Measured on SDK 10.0.400 with that workflow's own
+    restore command, the gate is live — a changed PackageReference version
+    fails there with NU1004 today. The previous comment's "only enabled in CI
+    so local `dotnet add package` keeps working" described a real tradeoff,
+    not an oversight, and removing the condition gives that convenience up on
+    purpose.
+
+    What is bought. The guarantee held only where a switch set in another
+    directory happened to be passed, so the file could not state its own
+    promise; and locally it did not hold at all. A local restore *updates* a
+    lock rather than enforcing it, which is how a committed lock elsewhere in
+    this project sat at preview1 against a preview2 producer for weeks,
+    through four arcs, with every local build passing. Unconditional gives
+    the working tree the guarantee CI already had.
+
+    What is paid is exactly the convenience the old rationale named:
+    `dotnet add package`, and any deliberate version edit, now fails with
+    NU1004 instead of quietly updating the lock. Recover with
+    `dotnet restore -p:RestoreForceEvaluate=true`, which is what the CLI's
+    force-evaluate switch sets, and commit the regenerated lock. One command,
+    once per intended change, on an artefact whose whole purpose is that it
+    does not change silently. (The switch is spelled here as a property
+    because an XML comment may not contain a double hyphen.)
+
+    What it does not buy, measured here rather than assumed: locked mode
+    compares the lock against PackageReference versions, not against the
+    version a ProjectReference contributes. A ProjectReference version bump
+    leaves the lock stale and restore passes in locked mode regardless, so
+    that kind of change still needs a force-evaluated restore to reach the
+    lock — nothing below will catch it.
   -->
   <PropertyGroup>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
+    <RestoreLockedMode>true</RestoreLockedMode>
   </PropertyGroup>
 
 </Project>
