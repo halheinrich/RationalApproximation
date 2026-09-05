@@ -1,14 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    TargetFramework, LangVersion, Nullable, ImplicitUsings and analyzer
-    settings come from Directory.Build.props. Test projects opt out of XML
-    doc generation, as that file documents.
+    TargetFramework, LangVersion, Nullable, ImplicitUsings, analyzer settings
+    and XML doc generation all come from Directory.Build.props.
   -->
   <PropertyGroup>
     <RootNamespace>HalHeinrich.Numerics.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!--
+      GenerateDocumentationFile is inherited as true. This project used to set
+      it false, which made IDE0005 structurally unable to fire here, because
+      documentation generation is that rule's documented prerequisite
+      (roslyn#41640) - halheinrich/Math#43. Measured here before the change:
+      with the severity set and the opt-out still in place, this project failed
+      to build with `error EnableGenerateDocumentationFile` naming both.
+
+      An unused using rots identically in a test, so the prerequisite is met
+      rather than the rule scoped away from this project, and the
+      undocumented-member warning the generated file provokes is suppressed
+      instead. Test methods are named, not documented; CS1591 is the only part
+      of doc generation this project wants no part of.
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -21,10 +21,19 @@
   </PropertyGroup>
 
   <!--
-    Generate XML documentation by default. Test projects opt out by
-    setting <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    in their csproj. (We can't gate this on $(IsPackable) here because
-    the SDK locks in its decision before Directory.Build.targets runs.)
+    Generate XML documentation for every project, the test project included.
+    (We can't gate this on $(IsPackable) here because the SDK locks in its
+    decision before Directory.Build.targets runs.)
+
+    The test project used to opt out, and this comment used to describe that
+    as the arrangement. It was a hole rather than a convention: documentation
+    generation is IDE0005's documented prerequisite (roslyn#41640), so opting
+    out made that rule structurally unable to fire there, and this repository's
+    "0 warnings under AnalysisMode=All" silently meant less in the test project
+    than in the product one - halheinrich/Math#43. The test project now
+    inherits this value and suppresses CS1591 instead, so the baseline means
+    one thing in both projects rather than two things depending on which you
+    are in.
   -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

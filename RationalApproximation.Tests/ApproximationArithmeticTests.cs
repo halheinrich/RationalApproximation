@@ -1,5 +1,3 @@
-using System.Numerics;
-
 using static HalHeinrich.Numerics.Tests.Sampling;
 
 namespace HalHeinrich.Numerics.Tests;

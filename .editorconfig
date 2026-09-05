@@ -115,6 +115,13 @@ dotnet_diagnostic.CA1716.severity = none
 # Stylistic preference; primary constructors aren't always clearer.
 dotnet_diagnostic.IDE0290.severity = suggestion
 
+# IDE0005: Remove unnecessary using directives.
+# Explicit, because the rule's build-time default is silent: this repository's
+# "0 warnings under AnalysisMode=All" never included it (halheinrich/Math#43).
+# GenerateDocumentationFile is its documented prerequisite (roslyn#41640),
+# which is why the test project no longer opts out of that.
+dotnet_diagnostic.IDE0005.severity = warning
+
 # CA1707: Identifiers should not contain underscores.
 # Test method names use underscores by convention (Method_Condition_Result).
 # CA1508: Avoid dead conditional code.
