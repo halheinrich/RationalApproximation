@@ -105,7 +105,7 @@
       "rationalapproximation": {
         "type": "Project",
         "dependencies": {
-          "HalHeinrich.Numerics.BigRational": "[0.1.0-preview1, )"
+          "HalHeinrich.Numerics.BigRational": "[0.1.0-preview2, )"
         }
       }
     }
