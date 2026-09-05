@@ -31,6 +31,75 @@
   </PropertyGroup>
 
   <!--
+    Every ProjectReference builds in the configuration its consumer was asked
+    for. halheinrich/Math#47.
+
+    Without this, a Release build of this member links the *Debug*
+    BigRationalLibrary, and every "0 warnings in Release" and "passes in
+    Release" ever recorded here was measured against a Debug producer. This
+    repository has exactly one reference that can be affected: the one in
+    RationalApproximation.csproj that escapes the repository altogether, to
+    ..\..\BigRationalLibrary. RationalApproximation.slnx lists only this
+    member's own two projects, and a solution assigns a configuration only to
+    the projects it contains.
+
+    Measured here before and after this property, both times a solution build
+    at `-c Release -t:Rebuild`: before, the BigRationalLibrary.dll copied into
+    this repository's bin/Release differed from the producer's own Release
+    output; after, the two are identical.
+
+    That is stated as the comparison rather than as a pair of hashes on
+    purpose — halheinrich/Math#49. The SDK embeds the producer's HEAD sha in
+    AssemblyInformationalVersion, so a producer hash identifies a *commit*
+    rather than a source state and is false as soon as the producer commits
+    again. The check is: build the producer in Release, build this member in
+    Release with -t:Rebuild, and compare the two BigRationalLibrary.dll files
+    by hashes computed in the same run. tools/check-release-linkage.sh in the
+    umbrella is what does that, and it is what verified this change rather
+    than the session's own report.
+
+    Why the metadata that looks like the obvious fix is not the fix. Setting
+    SetConfiguration on the ProjectReference is applied at evaluation and then
+    overwritten at build, measured in four rows on the issue by the
+    ContinuedFractions session. In Microsoft.Common.CurrentVersion.targets on
+    SDK 10.0.400, line 1584 defaults ShouldUnsetParentConfigurationAndPlatform
+    to true whenever BuildingSolutionFile or BuildingInsideVisualStudio is
+    set, and line 1609 hands it to the AssignProjectConfiguration task, whose
+    job is then to rewrite SetConfiguration on every reference absent from the
+    solution map, unsetting the parent's configuration so the referenced
+    project falls back to its own default.
+
+    Line 1584's condition names BuildingInsideVisualStudio as well, so this
+    was never confined to `dotnet build <solution>`: Release builds inside
+    Visual Studio 2026 linked the Debug producer too. CI never saw it from
+    either direction — .github/workflows/build-and-test.yml builds the
+    solution with no -c and is therefore Debug-only, so the one configuration
+    this defect lives in is the one configuration CI does not build. Nothing
+    about the workflow changes here.
+
+    Flagged rather than quietly relied on, on three counts. It overrides an
+    MSBuild default instead of working with it. The property is not part of
+    the documented public surface; it lives in the SDK's targets, which is
+    where it was read, so an SDK upgrade may change it with no error and a
+    silently wrong binary as the symptom. And it propagates Platform as well
+    as Configuration, which is harmless only while every member is
+    AnyCPU-only. The default exists so a solution configuration is not forced
+    onto a project that may not define it; every member here defines exactly
+    Debug and Release with no platform variation, so the condition it guards
+    against does not arise. If either premise changes, this is the decision to
+    revisit.
+
+    Preferred over listing BigRationalLibrary in this member's solution, which
+    also works and uses only supported solution semantics: membership puts a
+    foreign project inside this member's solution, scales with dependency
+    depth as the graph grows, and when incomplete it fails silently, restoring
+    exactly this bug with exactly this symptom.
+  -->
+  <PropertyGroup>
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+  </PropertyGroup>
+
+  <!--
     Lock-file based version pinning. The lock file (packages.lock.json)
     captures exactly the resolved package versions and is committed to git,
     so any clone restores the same dependency graph. RestoreLockedMode fails
