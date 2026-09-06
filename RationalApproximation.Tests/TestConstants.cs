@@ -130,6 +130,53 @@ internal sealed class CallCountingConstant : IRealConstant
 }
 
 /// <summary>
+/// A transparent decorator over any provider, counting how many refinement sequences were started
+/// and how many refinements were pulled from them.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The instrument for the two obligations that have no other witness: a consumer that is
+/// <b>lazy</b> pulls nothing until it enumerates, and a consumer that is <b>incremental</b> starts
+/// one sequence and advances it rather than restarting. Both are invisible in a return value, so
+/// they are measured here rather than asserted about.
+/// </para>
+/// <para>
+/// Separate from <see cref="CallCountingConstant"/> because the two measure different axes and are
+/// used against different claims: that one is a provider whose <i>bound</i> calls are counted, to
+/// show <see cref="IRealConstant.StepFor"/> does not scan; this one wraps an arbitrary provider
+/// and counts its <i>refinements</i>, to show a consumer does not restart. Neither is a stand-in
+/// for the behaviour under test.
+/// </para>
+/// <para>
+/// The count of started sequences increments on the first pull rather than on the call to
+/// <see cref="Refinements"/>, because an iterator's body does not run until it is enumerated -
+/// which is exactly the laziness being measured.
+/// </para>
+/// </remarks>
+/// <param name="inner">The provider to pass through and count.</param>
+internal sealed class CountingConstant(IRealConstant inner) : IRealConstant
+{
+    /// <summary>Gets the number of refinement sequences that have been enumerated at all.</summary>
+    public int SequencesStarted { get; private set; }
+
+    /// <summary>Gets the total number of refinements pulled across every sequence.</summary>
+    public int RefinementsPulled { get; private set; }
+
+    public BigRational ErrorBoundAt(int step) => inner.ErrorBoundAt(step);
+
+    public IEnumerable<Approximation> Refinements()
+    {
+        SequencesStarted++;
+
+        foreach (Approximation refinement in inner.Refinements())
+        {
+            RefinementsPulled++;
+            yield return refinement;
+        }
+    }
+}
+
+/// <summary>
 /// A deliberately defective constant whose refinements run out. Used to show that
 /// <see cref="IRealConstant.ApproximateTo"/> reports a broken implementation rather than
 /// returning something wrong.

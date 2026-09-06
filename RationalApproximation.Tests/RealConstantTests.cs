@@ -267,15 +267,4 @@ public class RealConstantTests
             Assert.True(constant.ErrorBoundAt(200) < Ratio(1, 1000000));
         }
     }
-
-    private static int ScanForStep(IRealConstant constant, BigRational target)
-    {
-        for (int step = 0; ; step++)
-        {
-            if (constant.ErrorBoundAt(step) <= target)
-            {
-                return step;
-            }
-        }
-    }
 }

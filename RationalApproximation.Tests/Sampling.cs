@@ -57,6 +57,28 @@ internal static class Sampling
     /// </summary>
     public static string Inv(FormattableString message) => FormattableString.Invariant(message);
 
+    /// <summary>
+    /// Finds the first step whose error bound meets a target by scanning from zero, which is the
+    /// definition <see cref="IRealConstant.StepFor"/> is checked against.
+    /// </summary>
+    /// <remarks>
+    /// Built from the definition and never from a search, because a search checked against another
+    /// search proves only that the two agree. Shared rather than repeated: the expectation for
+    /// <see cref="IRealConstant"/>'s bisection and the expectation for
+    /// <see cref="AffineConstant.StepFor"/>'s delegation are the same rule, and a rule stated twice
+    /// can only be re-diverged.
+    /// </remarks>
+    public static int ScanForStep(IRealConstant constant, BigRational target)
+    {
+        for (int step = 0; ; step++)
+        {
+            if (constant.ErrorBoundAt(step) <= target)
+            {
+                return step;
+            }
+        }
+    }
+
     /// <summary>Determines whether a positive rational is an exact power of two, of either sign.</summary>
     public static bool IsPowerOfTwo(BigRational value)
     {
