@@ -1,6 +1,13 @@
+# One rule, stated once: every text file is LF in the blob and LF on checkout.
+#
+# Ruled 2026-09-05 (halheinrich/Math#50); `../VISION.md` § Conventions carries
+# the reasoning. `.editorconfig` states the same rule to the editor at `[*]`,
+# because two mechanisms need the answer — git at checkout, the editor while
+# writing — and they must say the same thing.
+#
+# No per-extension exceptions, deliberately. This member carried five of them
+# (.sln .csproj .props .targets .cs) and that list is exactly what diverged: it
+# still named .sln, a format this member has not had since the .slnx ruling of
+# the same day, and never named .slnx. A list maintained in two files cannot be
+# kept in sync, only re-diverged.
 * text=auto eol=lf
-*.sln text eol=crlf
-*.csproj text eol=crlf
-*.props text eol=crlf
-*.targets text eol=crlf
-*.cs text eol=crlf
