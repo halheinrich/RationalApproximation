@@ -206,8 +206,9 @@ public class AffineConstantTests
     {
         foreach ((BigRational offset, BigRational scale) in AffineMaps())
         {
-            var affine = new AffineConstant(offset, scale, new HalvingConstant());
-            BigRational truth = offset + (scale * HalvingConstant.Truth);
+            var inner = new HalvingConstant();
+            var affine = new AffineConstant(offset, scale, inner);
+            BigRational truth = offset + (scale * inner.Truth);
 
             BigRational? previous = null;
             foreach (Approximation refinement in affine.Refinements().Take(40))
@@ -362,8 +363,9 @@ public class AffineConstantTests
     [Fact]
     public void ApproximateTo_ThroughTheInterface_MeetsTheTargetAndEnclosesTheTruth()
     {
-        var affine = new AffineConstant(Ratio(6, 1), Ratio(-4, 1), new HalvingConstant());
-        BigRational truth = Ratio(6, 1) + (Ratio(-4, 1) * HalvingConstant.Truth);
+        var inner = new HalvingConstant();
+        var affine = new AffineConstant(Ratio(6, 1), Ratio(-4, 1), inner);
+        BigRational truth = Ratio(6, 1) + (Ratio(-4, 1) * inner.Truth);
 
         foreach (int denominator in new[] { 2, 3, 97, 1000, 65536 })
         {

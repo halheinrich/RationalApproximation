@@ -35,12 +35,50 @@ internal static class TestConstants
 
 /// <summary>
 /// A constant whose error bound halves at every step: <c>ErrorBoundAt(n)</c> is exactly
-/// <c>1/2^n</c>, so the crossing points are readable by inspection. It converges to one.
+/// <c>1/2^n</c>, so the crossing points are readable by inspection. It converges to
+/// <see cref="Truth"/>, which is one unless another limit is given.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>The enclosure is one-sided: the truth is exactly the upper endpoint.</b> Step <c>n</c> is
+/// <c>Truth - 1/2^n</c> with radius <c>1/2^n</c>, so the interval is
+/// <c>[Truth - 2/2^n, Truth]</c> and <c>Value + MaxError == Truth</c> at every step. That is an
+/// incidental property of this double rather than anything the contract requires, and it is
+/// load-bearing for anything that searches the enclosure: a rational sitting an arbitrarily small
+/// distance <i>above</i> the truth is outside every enclosure this double produces, while one
+/// sitting the same distance below is inside. Measured 2026-09-06 - the same limit, one target
+/// apart, terminates the sweep at denominator 3 under a centred enclosure and at denominator
+/// 43693 under this one. Any test whose expectation depends on which rationals the interval
+/// contains must therefore be checked against this shape and not against a centred one.
+/// </para>
+/// <para>
+/// <b>A rational limit is behaviourally identical to an irrational one at every reachable
+/// precision, and is not identical in the limit.</b> A limit of large height is not evidence about
+/// irrationals, and results obtained with one must never later be read as such: the enclosure
+/// eventually reaches it and the row falls to zero, where a genuinely irrational target's row
+/// would not. What a rational limit does model faithfully is the only thing a finite run can ever
+/// see, which is why it is enough for a control and not enough for a claim.
+/// </para>
+/// <para>
+/// Parameterised on the limit rather than duplicated per limit: a second double halving towards a
+/// different value would be this rule written twice, which the umbrella's writing-code contract
+/// forbids.
+/// </para>
+/// </remarks>
 internal sealed class HalvingConstant : IRealConstant
 {
-    /// <summary>The value this constant converges to. Every refinement encloses it.</summary>
-    public static BigRational Truth { get; } = BigRational.One;
+    /// <summary>Initialises a constant halving towards one.</summary>
+    public HalvingConstant()
+        : this(BigRational.One)
+    {
+    }
+
+    /// <summary>Initialises a constant halving towards the given limit.</summary>
+    /// <param name="limit">The value every refinement encloses and the sequence converges to.</param>
+    public HalvingConstant(BigRational limit) => Truth = limit;
+
+    /// <summary>Gets the value this constant converges to. Every refinement encloses it.</summary>
+    public BigRational Truth { get; }
 
     public BigRational ErrorBoundAt(int step)
     {
@@ -53,7 +91,7 @@ internal sealed class HalvingConstant : IRealConstant
         // Incremental: each refinement is the previous one plus the next halving, never a
         // recomputation from scratch.
         BigRational error = BigRational.One;
-        BigRational value = BigRational.Zero;
+        BigRational value = Truth - BigRational.One;
 
         while (true)
         {

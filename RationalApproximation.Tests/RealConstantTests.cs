@@ -145,7 +145,8 @@ public class RealConstantTests
     [Fact]
     public void ApproximateTo_ResultMeetsTheTargetAndStillEnclosesTheTruth()
     {
-        IRealConstant constant = new HalvingConstant();
+        var halving = new HalvingConstant();
+        IRealConstant constant = halving;
 
         foreach (int denominator in new[] { 2, 3, 10, 97, 1000, 65536 })
         {
@@ -153,7 +154,7 @@ public class RealConstantTests
             Approximation result = constant.ApproximateTo(target);
 
             Assert.True(result.MaxError <= target, Inv($"MaxError {result.MaxError} missed target {target}."));
-            Assert.True(result.Contains(HalvingConstant.Truth), Inv($"Refinement stopped enclosing the truth at target {target}."));
+            Assert.True(result.Contains(halving.Truth), Inv($"Refinement stopped enclosing the truth at target {target}."));
         }
     }
 
@@ -215,7 +216,7 @@ public class RealConstantTests
         BigRational? previous = null;
         foreach (Approximation refinement in constant.Refinements().Take(40))
         {
-            Assert.True(refinement.Contains(HalvingConstant.Truth));
+            Assert.True(refinement.Contains(constant.Truth));
 
             if (previous is BigRational earlier)
             {

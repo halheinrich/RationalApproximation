@@ -43,4 +43,47 @@ internal static class BoundedSearch
 
         return candidates!;
     }
+
+    /// <summary>
+    /// Wraps an approximator so that a search handed to a consumer cannot yield without end.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the case <see cref="RunToCompletion"/> cannot reach: a consumer such as
+    /// <see cref="ConstantRun"/> owns the enumeration, so a test cannot cap it from outside. This
+    /// caps it from inside, on the same constant, so the two say one thing.
+    /// </para>
+    /// <para>
+    /// <b>This is a budget, not a correctness device, and the distinction matters.</b>
+    /// <see cref="DenominatorSweep"/> always terminates: the enclosure's <c>Value</c> is itself a
+    /// <see cref="BigRational"/> <c>n/d</c>, so at denominator <c>d</c> the candidate is the centre
+    /// and the enclosure contains it by definition. What the cap buys is therefore not termination
+    /// but a <i>legible refusal</i> in place of an astronomically long but finite run. It catches
+    /// an approximator that yields forever; it does not, and cannot, catch a sweep that is merely
+    /// deep, because depth is invisible from outside the sequence. The depth budget is asserted
+    /// separately, by naming a rational the enclosure already contains.
+    /// </para>
+    /// </remarks>
+    public static IRationalApproximator Budgeted(IRationalApproximator approximator) =>
+        new BudgetedApproximator(approximator);
+
+    private sealed class BudgetedApproximator(IRationalApproximator inner) : IRationalApproximator
+    {
+        public IEnumerable<RationalCandidate> Search(Approximation enclosure)
+        {
+            int yielded = 0;
+
+            foreach (RationalCandidate candidate in inner.Search(enclosure))
+            {
+                yielded++;
+                if (yielded > CandidateCap)
+                {
+                    throw new InvalidOperationException(
+                        Inv($"The search yielded more than {CandidateCap} candidates for {enclosure.Value} without terminating."));
+                }
+
+                yield return candidate;
+            }
+        }
+    }
 }

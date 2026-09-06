@@ -296,7 +296,7 @@ public class TrendMatrixTests
     // ---------- the ruling, encoded ----------
 
     [Fact]
-    public void TrendTypes_ExposeNoVerdict()
+    public void TheRunAndTrendTypes_ExposeNoVerdict()
     {
         // No IsConverged, no Answer, no HasPlateaued. Each would be the rejected stopping rule
         // wearing a property name, and the first caller to find one would read it as a verdict.
@@ -305,7 +305,16 @@ public class TrendMatrixTests
         // this test is where the argument has to be made.
         string[] barred = ["converge", "answer", "plateau", "verdict", "winner", "settled", "stable", "best"];
 
-        foreach (Type type in new[] { typeof(TrendMatrix), typeof(TrendRow), typeof(TrendIteration) })
+        // ConstantRun and ConstantIteration are inside the guard because they are where a
+        // verdict member is most likely to be reached for: a run is the thing a caller wants an
+        // answer from. The rule is one rule, so it is stated once and the list widened.
+        Type[] guarded =
+        [
+            typeof(TrendMatrix), typeof(TrendRow), typeof(TrendIteration),
+            typeof(ConstantRun), typeof(ConstantIteration),
+        ];
+
+        foreach (Type type in guarded)
         {
             foreach (MemberInfo member in type.GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
             {
