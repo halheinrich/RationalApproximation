@@ -20,6 +20,12 @@ that.
 The separation is the point. This layer is a general instrument, testable
 against any enclosure, and is not shaped by any single hunt.
 
+**That bars implementations, not abstractions and combinators over them.**
+`AffineConstant` — `offset + scale · inner`, for any inner constant — satisfies
+the provider contract without naming a real, and `ConstantRun` drives one
+without knowing which. The test is whether the type would have to change to
+point the bench at a different constant.
+
 Design: `SPEC-rational-ratio.md` in the
 [umbrella repository](https://github.com/halheinrich/Math).
 

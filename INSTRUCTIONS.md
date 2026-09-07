@@ -52,6 +52,14 @@ about which reals are interesting; providers live one layer up in
 `RealConstants` and the investigation one layer above that. The separation is
 what makes this a general instrument rather than one hunt's private machinery.
 
+**That bars implementations, not abstractions and combinators over them.**
+`AffineConstant` implements `IRealConstant` and belongs here; `ConstantRun`
+drives one. Neither names a real. The admission test is whether the type would
+have to be changed to point the bench at a different constant — a provider
+would, a combinator parameterised by an arbitrary inner constant would not. The
+rule reaches the tests too: their doubles converge to values chosen for the
+shape of the arithmetic, never because the value is interesting.
+
 ### `Approximation` — the enclosure everything is built on
 
 A `readonly record struct` of a `Value` and a proven `MaxError`, with the
@@ -235,6 +243,61 @@ caller may pass every improvement a search yielded, or add controls it wants
 watched. Encoding a policy here would be this layer deciding what is worth
 looking at.
 
+### `AffineConstant` — the one combinator
+
+`offset + scale · inner`, for any inner `IRealConstant`. No series, no
+truncation, no convergence argument of its own.
+
+`Refinements()` is the composition and nothing else: `Approximation.Multiply`
+and `Add` against *exact* operands. Multiplication's
+`|a|*beta + |b|*alpha + alpha*beta` collapses to `|scale|*beta` when the scale's
+radius is zero, so **the bound is exactly `|scale|` times the inner's and
+nothing rounds** — an equality where the rest of this library states an
+inequality. Written this way so the propagation rule stays at the one site it is
+checked against, which is also why a negative scale costs nothing: the `|scale|`
+is the `Abs` already inside `Multiply`, not a sign case written here.
+
+**A zero scale is refused by the contract, not by defensiveness.** It would make
+every refinement the exact value `offset`, identical to its predecessor, which
+breaks strict improvement for *every* possible inner. With `|scale| > 0` the
+inner's strict improvement carries through, so nothing was weakened to admit
+this type — and that is what keeps an exact enclosure unreachable through any
+conforming provider.
+
+`StepFor` is re-declared and delegates to `Inner.StepFor(target / |scale|)`,
+exactly rather than approximately, since `|scale| > 0` makes the two conditions
+equivalent under exact division. `ApproximateTo` is deliberately left on the
+interface: delegating it would save nothing, and the asymmetry is the point —
+`StepFor` plans a run at no refinements, `ApproximateTo` restarts the sequence
+on every call.
+
+### `ConstantRun` / `ConstantIteration` — one constant, no divisor
+
+Enclose, sweep, iterate, assemble a `TrendMatrix`. The composition and nothing
+else; every contract it wires is already this layer's.
+
+**Not a degenerate ratio run, and it must not be built as one.** A ratio's
+distinctive content is the error-share decision between two operands; with one
+constant there is only one thing to advance, so the decision does not exist.
+Reaching a one-operand question through a two-operand runner would manufacture a
+divisor the problem does not have.
+
+**One refinement sequence is held across the whole schedule and advanced**, so
+the last iteration costs the depth it reaches rather than that depth times the
+number of columns. `ApproximateTo` is never used: it is a fresh `foreach` over
+`Refinements()`, so once per target would restart from step zero and make a run
+cost the sum of its prefixes. `ConstantIteration.Step` is what makes that
+observable — the last iteration's step is the whole run's refinement count.
+
+Nothing coarsens here. The provider's realised `MaxError` is already proven and
+exact, so widening it would only lose accuracy; the ratio pipeline coarsens
+because a *propagated* bound grows, and that reason does not reach this far.
+
+**What a run costs is not a function of its targets**, and the type's own
+remarks carry the two measured regimes. The consequence for a caller is the
+part that belongs here: a schedule is never affordable because a law says so,
+and the expensive regime is the near-miss shape this bench exists to refuse.
+
 ### Internal pattern: a mechanism is never its own oracle
 
 `BruteForce` is built from the definitions and **never calls the sweep** — a
@@ -370,6 +433,57 @@ public sealed class TrendRow            // constructed only by TrendMatrix.Build
 copies its input so a later change to the source has no effect. A run with no
 iterations yields an empty matrix, which is honestly empty rather than an error.
 
+```csharp
+public sealed class AffineConstant : IRealConstant
+{
+    public AffineConstant(
+        BigRational offset, BigRational scale, IRealConstant inner);
+
+    public BigRational Offset { get; }
+    public BigRational Scale { get; }          // never zero
+    public IRealConstant Inner { get; }
+
+    public BigRational ErrorBoundAt(int step);            // |Scale| * inner's
+    public IEnumerable<Approximation> Refinements();
+    public int StepFor(BigRational targetError);          // delegates, exactly
+}
+```
+
+The constructor throws `ArgumentNullException` on a null `inner` and
+`ArgumentOutOfRangeException` on a zero `scale`. `ErrorBoundAt` rejects a
+negative step; `StepFor` leaves a non-positive target to the inner's own check,
+which the division cannot mask because dividing by a positive magnitude
+preserves the sign. `ApproximateTo` is reachable only through the interface.
+
+```csharp
+public sealed class ConstantRun
+{
+    public IReadOnlyList<ConstantIteration> Iterations { get; }
+    public TrendMatrix Matrix { get; }
+
+    public static ConstantRun Execute(
+        IRealConstant constant,
+        IEnumerable<BigRational> targetErrors,
+        IRationalApproximator? approximator = null);   // DenominatorSweep
+}
+
+public sealed class ConstantIteration   // constructed only by ConstantRun
+{
+    public BigRational TargetError { get; }
+    public int Step { get; }
+    public Approximation Enclosure { get; }
+    public TrendIteration Trend { get; }
+    public IReadOnlyList<RationalCandidate> Candidates { get; }
+    public RationalCandidate Simplest { get; }
+}
+```
+
+`Execute` throws `ArgumentNullException` on a null constant or schedule, and
+`ArgumentException` when the targets are not strictly decreasing or the last is
+not positive. An empty schedule is an honestly empty run and pulls no
+refinements at all. `Simplest` throws `InvalidOperationException` when the
+search yielded nothing, which only a defective approximator can do.
+
 ## Pitfalls
 
 - **This repository does not build standalone.** The `ProjectReference` to
@@ -383,10 +497,20 @@ iterations yields an empty matrix, which is honestly empty rather than an error.
   is then upstream.
 - **`StepFor` and `ApproximateTo` are invisible on a concrete provider's own
   type.** They are default interface members, reachable only through an
-  `IRealConstant`-typed reference. The remedy is to hold the interface; an
-  implementation that wants them on its own surface must re-declare them, and
-  should then delegate rather than reimplement. This caught the tests first, and
-  it will catch every provider written against this contract.
+  `IRealConstant`-typed reference. An implementation that wants them on its own
+  surface must re-declare them, and should then delegate rather than
+  reimplement. This caught the tests first, and it will catch every provider
+  written against this contract.
+
+  **"Hold the interface" is the remedy only for a type that has *not*
+  re-declared** — corrected 2026-09-06, when `AffineConstant` made the other
+  case real. Once a type re-declares, holding the interface is no longer
+  merely unnecessary: `CA1859` makes an interface-typed local an **error**
+  under `AnalysisMode=All`, so the two halves of the advice apply to disjoint
+  types and following the wrong half will not compile. For a re-declaring type
+  hold the concrete type and cast at the one site that still needs a defaulted
+  member. Fifteen locals moved that way in `AffineConstantTests`; the single
+  `ApproximateTo` call site keeps its cast.
 - **Do not conflate the two rounding sites.** See the table in § Architecture:
   coarsening is a directed ceiling, the sweep's numerator is a nearest rounding,
   and either one at the other's site is a defect.
@@ -420,6 +544,42 @@ iterations yields an empty matrix, which is honestly empty rather than an error.
   every stage. What locked mode does *not* cover — a version arriving through a
   `ProjectReference` rather than a `PackageReference` — is recorded in
   `Directory.Build.props`.
+- **A near-miss row is indistinguishable from a find at every reachable
+  precision.** This is a property of the method, not of one fixture, and it is
+  the sharpest reason no `IsConverged` may ever exist on these types. For a
+  constant sitting `δ` above a simple rational `r`, the row for `r` has cells
+  `|ε_k − δ|`, so while `ε_k ≫ δ` the row **falls at every column**, exactly as
+  a genuine find does. It floors at `δ` and no schedule that does not pass `δ`
+  can see the floor. Measured 2026-09-06 with `δ = 10⁻³⁰`: the row fell at every
+  one of five columns and nothing in the matrix separated it from an answer. A
+  run earns a denominator bound; a falling row is not a second, weaker verdict
+  that can be read alongside it.
+- **The scaling rule is stated twice in `AffineConstant`, deliberately, and must
+  not be single-sourced.** `Refinements()` gets `|scale|` implicitly, from the
+  `Abs` inside `Approximation.Multiply`; `ErrorBoundAt` states it explicitly as
+  `magnitude * Inner.ErrorBoundAt(step)`. They cannot be unified, because
+  `ErrorBoundAt` is obliged to be computable *without* doing the step's work and
+  so cannot go through a refinement. What keeps them honest is the test
+  asserting that `ErrorBoundAt` upper-bounds the realised `MaxError` of the same
+  step — the bridge between the two routes. Deleting the duplication means
+  deleting the bridge. Evidence that it works: dropping the `Abs` reddens tests
+  on both sides at once.
+- **An expectation about which rationals an enclosure admits must be checked
+  against the provider's enclosure shape.** `HalvingConstant` is one-sided —
+  `Value + MaxError == Truth` at every step — and that is incidental to it, not
+  required by any contract. A rational an arbitrarily small distance *above* the
+  truth is outside every such enclosure and one the same distance below is
+  inside. Measured 2026-09-06: one limit, one schedule, terminating at
+  denominator 3 under a centred enclosure and at 43693 under this one. A control
+  whose property survives only one of the two shapes is not testing what its
+  name says.
+- **`AnalysisMode=All` has twice been the earlier witness this arc**, which is
+  the answer to anyone pricing its friction. `CA1859` turned the stale "hold the
+  interface" remedy above from prose into a build error. And during a mutation
+  run of `ConstantRun`, `CA1823` refused to compile the mutant at all, because
+  removing the held enumerator orphaned its `RefinementsEndedMessage` — the
+  analyzer named the defect before any test could observe it. Neither was a
+  style complaint; both were the first thing to notice a real change.
 
 ## Subproject-internal next steps
 

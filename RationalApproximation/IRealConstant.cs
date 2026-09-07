@@ -18,8 +18,12 @@ namespace HalHeinrich.Numerics;
 /// <para>
 /// <see cref="StepFor"/> and <see cref="ApproximateTo"/> are default interface members, so they
 /// are reachable only through an <see cref="IRealConstant"/>-typed reference and not from a
-/// concrete provider's own surface. Hold the interface. An implementation that wants them on its
-/// own type must re-declare them, and should then delegate rather than reimplement.
+/// concrete provider's own surface. A caller of a provider that has <i>not</i> re-declared them
+/// must therefore hold the interface. An implementation that wants them on its own type may
+/// re-declare them, and should then delegate rather than reimplement - after which the concrete
+/// type is the one to hold, because an interface-typed reference to it has stopped being merely
+/// unnecessary and is flagged, and only a member left undeclared still needs a cast. The two
+/// halves of that advice apply to disjoint types; following the wrong half does not compile.
 /// </para>
 /// </remarks>
 public interface IRealConstant
