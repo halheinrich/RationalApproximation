@@ -181,11 +181,19 @@ and slow. A floating-point prefilter would work arithmetically and is a standard
 technique, but it would put a numerically delicate threshold at exactly the
 decision this type exists to get right, with nothing left to validate *it*
 against. A fast searcher is a third implementation behind the same interface,
-never a change here. Denominators run `1, 2, 3, ...` unbounded, because the
-enclosure decides where the search stops and a second limit would let it end
-quietly without an answer. It always terminates, including on an exact
-enclosure: the value is itself a `BigRational`, so at worst the sweep reaches
-that value's own denominator.
+never a change here. It always terminates, including on an exact enclosure: the
+value is itself a `BigRational` `n/d`, so at worst the sweep reaches `d`.
+
+Denominators nevertheless run `1, 2, 3, ...` unbounded — **not because no bound
+could be imposed**, since `d` is one, but because such a bound is a *budget* and
+never a correctness device. It buys a legible refusal in place of an
+astronomically long but finite run, and how long a run is worth waiting for is
+the caller's question rather than the type's. The gap is wide: against a target
+of `7919/307` the sweep stops at denominator 39 while `d` is 307, and a
+provider's enclosure carries a value whose denominator has as many digits as its
+precision. This rationale replaced one saying no bound *existed* and arguing
+from that against ever imposing one — both halves wrong, and the second argued
+against the very cap the test suite already runs under.
 
 **Two findings the spec did not anticipate**, recorded here because they change
 what the API means:
@@ -197,10 +205,71 @@ what the API means:
    tie-rule artifact. Every observed failure enclosed at least two integers and
    none had `MaxError` below `1/2`, so the claim holds for every enclosure
    narrower than 1 — which is every enclosure this bench will produce.
+   `HeightSweep` has no such exception; see below and § Pitfalls.
 2. The reduction worry cannot materialise. A candidate reducing to a smaller
    denominator would not be a strict improvement on what that denominator had
    already yielded, so it is never emitted; every yielded candidate is therefore
    already in lowest terms, with its denominator equal to its sweep index.
+
+### `HeightSweep` — the same claim, enumerated in height order
+
+The second `IRationalApproximator`, and what it produces is the *ordering*, not
+a different answer. Against a target of 6 the sweep proposes `6/1` at
+denominator 1 and stops, so a step-by-step exhibit of that run shows one
+candidate and no refutation; `HeightSweep` tries `1/1 2/1 3/1 4/1 5/1 6/1`,
+which makes "are we trying other candidates" a visible answer rather than an
+assertion. That exhibit is the whole reason the type exists.
+
+**The axis is chosen from the target, not fixed:** numerators when
+`|Value| > 1`, denominators otherwise. Naive height is `max(|p|, q)`, so above
+one the numerator carries it and below one the denominator does, and a caller
+wanting the least-height rational an enclosure admits should not have to know
+which side of 1 its target sits on to pick a type. `SearchesNumerators` is
+public because the axis decides what the terminal *means* — a numerator bound on
+one side and a denominator bound on the other, and a bound reported without
+saying which is not one a reader can use.
+
+A *fixed* numerator axis would not merely be inconvenient below one; it would
+stop being height order at all. Against a target near `0.34` the numerators
+`1, 2, 3` pair with denominators `3, 6, 9`, so the heights visited jump by three
+and all but the first of each family is discarded as unreduced. Choosing the
+axis also dissolves this side's only hazard instead of guarding it: the
+numerator axis divides by the target where the sweep multiplies by an integer,
+and the division is reachable only where `|Value| > 1`, so a zero or near-zero
+target never meets it.
+
+**Below one this is not an independent implementation, and a cross-check there
+proves nothing.** It delegates to `DenominatorSweep` rather than restating that
+loop, so the non-independence is structural rather than a caveat someone has to
+remember. Above one the two are genuinely different code, and that is the only
+regime where their agreement is evidence.
+
+**The closest rational of a given numerator is a bracket, not a rounding**, and
+this is the easiest thing on this axis to get wrong. At a fixed *denominator*
+the closest numerator is a nearest-rounding of `x*b`, because the numerator
+enters `p/b − x` linearly. At a fixed *numerator* it is not: `a/b` is a
+hyperbola in `b`, so the integer nearest `a/x` is not always the one minimising
+`|a/b − x|`. At `x = 29/10` with `a = 10`, rounding gives 3 at distance `13/30`
+while 4 is closer at `2/5`; the two disagree at 31 of the first 4000 numerators
+of a target near 26. `BestDenominator` brackets `a/|x|` with a floor and its
+successor and compares both exactly — so this site makes **no rounding
+decision**, which is why it does not join the two in the table above.
+
+**Its terminal is the least-height enclosed rational without qualification**,
+which is where it differs from its sibling; § Pitfalls owns that divergence. It
+costs a factor of the target's magnitude more, and that is not slack to reclaim:
+both searches end at the *same* rational, one having reached its denominator and
+the other its numerator, so the ratio of indices examined **is** the target.
+Measured on `7919/307`: 129 against 5, and 1006 against 39 one target tighter.
+
+**The reduced-pair skip is an early-out, not a correctness device.** A
+non-reduced pair equals one of smaller numerator whose own best denominator was
+at least as close, so the improvement filter would drop it anyway — identical
+output with and without it over 408 enclosures, and the mutant that removes it
+reddens nothing. **That redundancy holds only because the denominator is chosen
+by comparing distances**; under a rounded `a/x` the argument fails, so removing
+the bracket and the skip together would look like one simplification and be two
+defects.
 
 ### `TrendMatrix` / `TrendIteration` / `TrendRow`
 
@@ -316,6 +385,31 @@ have to be recomputed from that provider's own convergence formula, so an error
 in the formula would cancel against the same error in the expectation and the
 test would pass.
 
+There are now **three** searches over one claim — `DenominatorSweep`,
+`HeightSweep`, and `BruteForce` — and the third is the arbiter of the other two.
+It enumerates *every* reduced rational of each height rather than one per index,
+so it cannot miss a candidate the other two ordered past, which is exactly the
+failure neither of them could detect in the other.
+`BruteForce.IsNearestOfItsNumerator` is the mirror of its denominator twin and
+is written the same way, by comparing both neighbours rather than by rounding —
+which is the whole point, since on that axis a rounding would be *wrong*.
+
+### Internal pattern: lift an unobservable decision into a pure function
+
+A decision reachable only through machinery that hides its effect cannot be
+tested, and an untestable decision is an undefended one. The remedy is a seam:
+split the decision out as a pure function and give the tests that, leaving the
+machinery around it unchanged. `HeightSweep.BestDenominator` is `internal` for
+exactly this reason — its tie rule has no observable effect on `Search`, so
+nothing short of holding the method could defend it.
+
+**Third sighting of the same answer in this project.** `CLAUDE.md` § Shell
+records the first: three defects living behind a keypress were removed not by
+more care but by splitting *reading* a line from *interpreting* it, making
+`Interpret` a pure function with nineteen cases against it, so that only the
+read stayed terminal-gated. Reach for this whenever a decision is unobservable
+through the front door — the untestable surface should be one function wide.
+
 ## Public API
 
 Namespace `HalHeinrich.Numerics`.
@@ -385,6 +479,22 @@ public sealed class DenominatorSweep : IRationalApproximator
     public IEnumerable<RationalCandidate> Search(Approximation enclosure);
 }
 
+public sealed class HeightSweep : IRationalApproximator
+{
+    // true exactly when |enclosure.Value| > 1, so the terminal's NUMERATOR is
+    // the bound proved; false means its denominator is
+    public static bool SearchesNumerators(Approximation enclosure);
+
+    public IEnumerable<RationalCandidate> Search(Approximation enclosure);
+}
+```
+
+`HeightSweep.Search` delegates to `DenominatorSweep` whenever
+`SearchesNumerators` is false, so below one the two return the identical
+sequence. `BestDenominator` is `internal`, deliberately and load-bearingly —
+see § Pitfalls.
+
+```csharp
 public readonly record struct RationalCandidate
 {
     public BigRational Value { get; }
@@ -520,7 +630,35 @@ search yielded nothing, which only a defective approximator can do.
 - **Do not square by multiplying.** `a * a` is wider than `a.Pow(2)` and can
   admit values the true image excludes.
 - **Do not optimise `DenominatorSweep`**, and do not put a bound on its
-  denominator loop.
+  denominator loop. The same holds for `HeightSweep`, which is slower still by a
+  factor of the target's magnitude, on purpose. Neither loop is unbounded for
+  want of a bound — see § Architecture; a cap is a caller's budget and neither
+  type takes one.
+- **The two searches' terminals are not interchangeable, and they diverge
+  exactly where a reader is most likely to be watching.** `DenominatorSweep`
+  stops at the least-**denominator** enclosed rational, `HeightSweep` at the
+  least-**height** one, and the two differ precisely when the enclosure holds two
+  or more integers — measured over 5387 enclosures above one, that is the *only*
+  disagreement. `[1, 2]` yields `2/1` from the sweep and `1/1` from height order;
+  `12 ± 1` yields `12` and `11`. A wide enclosure is what an early iteration
+  looks like, so a caller that treats the two as substitutes is wrong at the
+  start of a run and right later, which is the worst order to be wrong in.
+  `HeightSweep`'s version of the claim is unconditional: above one, an enclosure
+  reaching down to 1 must contain 1, so height 1 is found first, and one that
+  does not reach it contains only rationals with `|p| > q` — exactly the family
+  enumerated.
+- **`HeightSweep.BestDenominator` is `internal` on purpose, and the visibility
+  is load-bearing.** Its tie rule — on a tie take the smaller denominator, the
+  candidate further from zero — has **no observable effect through `Search`**. A
+  tie at numerator `a` between denominators `b` and `b+1` puts both candidates
+  at distance `a/(2b(b+1))`, and a numerator whose ideal denominator falls
+  exactly halfway between two integers fits the target so badly that neither of
+  its candidates is ever a strict improvement; measured over 34111 tie
+  configurations, flipping the rule changes no yielded sequence. So the only
+  test that can defend the rule is one holding the method directly. Tidy it back
+  to `private` as unnecessary surface and that test goes with it, the rule
+  becomes undefended, and **nothing goes red**. Deleting the rule instead is also
+  wrong: an oracle must be deterministic whether or not you can watch it choose.
 - **Do not add a `bool` to the trend types.** The reflection test will fail, and
   that test is the intended place for the argument.
 - **An unbounded test of a search hangs rather than fails.** A defective search
@@ -573,13 +711,20 @@ search yielded nothing, which only a defective approximator can do.
   denominator 3 under a centred enclosure and at 43693 under this one. A control
   whose property survives only one of the two shapes is not testing what its
   name says.
-- **`AnalysisMode=All` has twice been the earlier witness this arc**, which is
-  the answer to anyone pricing its friction. `CA1859` turned the stale "hold the
-  interface" remedy above from prose into a build error. And during a mutation
-  run of `ConstantRun`, `CA1823` refused to compile the mutant at all, because
-  removing the held enumerator orphaned its `RefinementsEndedMessage` — the
-  analyzer named the defect before any test could observe it. Neither was a
-  style complaint; both were the first thing to notice a real change.
+- **`AnalysisMode=All` has four times been the earlier witness this arc**, which
+  is the answer to anyone pricing its friction. `CA1859` turned the stale "hold
+  the interface" remedy above from prose into a build error. And in three
+  separate mutation runs the compiler or an analyzer refused the mutant before
+  any test could observe it: `CA1823` on `ConstantRun`, because removing the
+  held enumerator orphaned its `RefinementsEndedMessage`; `CS0219` on
+  `HeightSweep`, because removing the improvement filter orphaned its own
+  bookkeeping; and `CA1823` again on `HeightSweep`, because forcing the
+  numerator axis made the delegated `DenominatorSweep` unreachable. **"Did not
+  compile" is therefore a legitimate mutation-run outcome and not a failed
+  experiment** — it is the same finding a red test would have been, arriving
+  earlier, and it is the concrete evidence for this setting that the rest of
+  these docs assert without showing. None was a style complaint; each was the
+  first thing to notice a real change.
 
 ## Subproject-internal next steps
 
@@ -589,6 +734,20 @@ search yielded nothing, which only a defective approximator can do.
 - **The trend types' shape was a proposal**, not an implementation of a ratified
   contract — the spec fixed the matrix's *content*, not its API. If that
   contract list is ever extended, this surface is what it reconciles against.
+- **A validated `TargetSchedule`, to single-source the schedule rule.** Ruled
+  2026-09-07; **not implemented, so the duplication stands.** The rule that a
+  run's target errors must be strictly decreasing with a positive last element
+  is written twice — `ConstantRun.FaultInTargets` here and `RatioRun`'s copy in
+  `Zeta` — and by `AGENTS.md` § Writing code that is one rule in two places, so
+  a correction can land on one and leave the other to contradict it. `Zeta`
+  cannot be referenced from this layer, so the only direction that helps is
+  exposing it from here. **Exposing the validator is the wrong fix**: it
+  publishes a policy on the most-depended-on layer while leaving both callers
+  free to skip it. The right one is a validated value type constructed through a
+  factory, the shape `Approximation` already uses so that a negative radius is
+  unrepresentable — which changes `ConstantRun.Execute`'s signature and requires
+  `Zeta` to change with it. That is a planned two-repo change, not a cheap one,
+  and it is why the duplication was left standing rather than papered over.
 
 Cross-cutting obligations that need `RealConstants` — the spec's positive and
 negative controls, and demonstrating on a real run the behaviour the trend

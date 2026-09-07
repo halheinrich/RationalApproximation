@@ -55,9 +55,29 @@ public sealed class DenominatorSweep : IRationalApproximator
     /// value than the last, ending with the first one the enclosure contains.
     /// </returns>
     /// <remarks>
-    /// Denominators run 1, 2, 3, ... without a bound, because there is no bound to impose: the
-    /// enclosure decides where the search stops, and imposing a second limit would let the search
-    /// end quietly without an answer.
+    /// <para>
+    /// Denominators run 1, 2, 3, ... without a bound - but <b>not</b> because none could be
+    /// imposed. One always can, and the termination argument on the type is it: the enclosure's
+    /// value is a <see cref="BigRational"/> <c>n/d</c>, so the candidate at denominator <c>d</c> is
+    /// the centre itself, which the enclosure contains by definition, and the sweep can never run
+    /// past <c>d</c>.
+    /// </para>
+    /// <para>
+    /// The reason there is none here is that such a bound is a <i>budget</i> and never a
+    /// correctness device. What it buys is a legible refusal in place of an astronomically long
+    /// but finite run, and how long a run is worth waiting for is the caller's question rather
+    /// than this type's, so it is not answered here. The gap is wide: against a target of
+    /// <c>7919/307</c> the sweep terminates at denominator 39 while <c>d</c> is 307, and a real
+    /// provider's enclosure carries a value whose denominator has as many digits as its precision,
+    /// putting the provable bound far beyond anywhere an answer is found.
+    /// </para>
+    /// <para>
+    /// This rationale previously read that there was no bound to impose, and argued from that
+    /// against ever imposing one - on the grounds that a second limit would let the search end
+    /// without an answer. Both halves were wrong: the bound exists, and a refusal the caller asked
+    /// for and can read is the opposite of ending quietly. <c>BoundedSearch</c> in the test project
+    /// is where this suite's budget lives, and carries the same framing.
+    /// </para>
     /// </remarks>
     public IEnumerable<RationalCandidate> Search(Approximation enclosure)
     {
