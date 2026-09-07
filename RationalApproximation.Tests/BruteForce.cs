@@ -103,6 +103,33 @@ internal static class BruteForce
         return distance <= below && distance <= above;
     }
 
+    /// <summary>
+    /// Determines whether the given rational is the closest one of its own numerator to the
+    /// target, checked against its two neighbours rather than by rounding.
+    /// </summary>
+    /// <remarks>
+    /// The mirror of <see cref="IsNearestOfItsDenominator"/>, and it cannot be written as a
+    /// rounding of <c>p/x</c>: <c>p/q</c> is a hyperbola in <c>q</c>, so the denominator nearest
+    /// <c>p/x</c> is not always the one minimising the distance. Comparing against both integer
+    /// neighbours is the definition, and is what <see cref="HeightSweep"/> is checked against.
+    /// </remarks>
+    public static bool IsNearestOfItsNumerator(BigRational candidate, BigRational target)
+    {
+        BigInteger p = candidate.Numerator;
+        BigInteger q = candidate.Denominator;
+        BigRational distance = BigRational.Abs(candidate - target);
+
+        BigRational above = BigRational.Abs(new BigRational(p, q + BigInteger.One) - target);
+
+        if (q == BigInteger.One)
+        {
+            return distance <= above;
+        }
+
+        BigRational below = BigRational.Abs(new BigRational(p, q - BigInteger.One) - target);
+        return distance <= below && distance <= above;
+    }
+
     private static void Consider(Approximation enclosure, int numerator, int denominator, SortedSet<BigRational> found)
     {
         if (BigInteger.GreatestCommonDivisor(BigInteger.Abs(numerator), denominator) != BigInteger.One)

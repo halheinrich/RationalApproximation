@@ -79,6 +79,21 @@ internal static class Sampling
         }
     }
 
+    /// <summary>Counts the integers an enclosure contains, endpoints included.</summary>
+    /// <remarks>
+    /// Two or more is the condition under which <see cref="DenominatorSweep"/>'s terminal is not
+    /// the least-height enclosed rational, and it is the condition under which that sweep and
+    /// <see cref="HeightSweep"/> can disagree. Shared rather than repeated: both test classes ask
+    /// the same question about the same boundary, and a rule stated twice can only be re-diverged.
+    /// </remarks>
+    public static int EnclosedIntegerCount(Approximation enclosure)
+    {
+        BigInteger smallest = BigRational.Round(enclosure.Lower, MidpointRounding.ToPositiveInfinity);
+        BigInteger largest = BigRational.Round(enclosure.Upper, MidpointRounding.ToNegativeInfinity);
+
+        return smallest > largest ? 0 : (int)(largest - smallest + BigInteger.One);
+    }
+
     /// <summary>Determines whether a positive rational is an exact power of two, of either sign.</summary>
     public static bool IsPowerOfTwo(BigRational value)
     {

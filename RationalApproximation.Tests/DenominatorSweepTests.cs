@@ -365,12 +365,4 @@ public class DenominatorSweepTests
         Assert.IsNotAssignableFrom<ICollection<RationalCandidate>>(search);
         Assert.Equal(2, search.Take(2).Count());
     }
-
-    private static int EnclosedIntegerCount(Approximation enclosure)
-    {
-        BigInteger smallest = BigRational.Round(enclosure.Lower, MidpointRounding.ToPositiveInfinity);
-        BigInteger largest = BigRational.Round(enclosure.Upper, MidpointRounding.ToNegativeInfinity);
-
-        return smallest > largest ? 0 : (int)(largest - smallest + BigInteger.One);
-    }
 }
