@@ -312,6 +312,94 @@ caller may pass every improvement a search yielded, or add controls it wants
 watched. Encoding a policy here would be this layer deciding what is worth
 looking at.
 
+### `SurvivorSearch` — refutation as a proof, not a trend
+
+Given enclosures of one unknown and a denominator bound `Q`, the rationals `p/q`
+in lowest terms with `q <= Q` that **every** enclosure contains.
+
+A candidate outside an enclosure of the unknown is not the unknown — permanently,
+whatever later enclosures do — so a refuted candidate never comes back and the
+survivor set only ever shrinks. That is what makes it evidence rather than a
+reading, and it is what a `TrendMatrix` row cannot offer. The proxy it replaces,
+a row that persists while improving, was defeated three separate ways in the
+exploration behind `halheinrich/Math#64`: by a near miss four orders of magnitude
+closer than the answer, by a plateau that stopped being flat when the height cap
+moved, and by a rival that was both unchanged and falling.
+
+**Deliberately not an `IRationalApproximator`, and the name says so twice.** That
+interface obliges an implementation to be lazy, strictly improving, of increasing
+height, and terminating on enclosure; this contract keeps only the first. Many
+enclosures rather than one, no ordering by distance or by height, and everything
+still standing rather than the first hit. `Sweep` is likewise absent from the
+name, because both types carrying it implement the interface this one does not.
+Whether the contract deserves an interface of its own is a question for a second
+implementation.
+
+**The element type is `BigRational` and not `RationalCandidate`.** A candidate
+binds a value to the *one* enclosure it was judged against, so `IsEnclosed`,
+`MinDistance` and `MaxDistance` all read off that single enclosure. Returned from
+a search over many it would carry a property that reads as "survives" and does
+not mean it. A caller wanting distances holds the enclosures already.
+
+**Canonical form, and what it actually costs here.** `BigRational` is always in
+lowest terms, so no survivor can be a *mis-spelling* of another; what the walk
+has to avoid is proposing one rational once per denominator that spells it. The
+scratchpad that dropped the greatest-common-divisor step reported 1500 survivors
+which were 1500 spellings of `6` — the pairs `(6q, q)` for `q` from 1 to 1500.
+Unlike `HeightSweep`'s identical-looking skip this one is load-bearing: nothing
+downstream filters, and removing it reddens thirteen tests.
+
+**Seeded from the narrowest enclosure; decided against all of them.** One
+enclosure is enough to refute, so seeding the walk with the narrowest does nearly
+all the work for one enclosure's cost. The seed is a **cost** choice and not a
+correctness one — any enclosure gives the same answer, because a candidate the
+seed rejects is refuted by the seed — and the mutant that seeds from the *widest*
+correspondingly reddens nothing. Intersecting is still strictly stronger than
+filtering on any one of them, since enclosures do not nest: two of half-width
+`1/10` centred on `6` and on `61/10` admit seven candidates of denominator at or
+below 10 between them and share only two.
+
+**The candidate space is never materialised**, which is why the reachable bound
+is limited by time and not by memory: candidates are walked one at a time and
+dropped at the first enclosure that excludes them. The *result* is lazy for the
+same reason, and that buys a property an eager one could not — a caller may stop
+at the first survivor. Argument validation is therefore eager while enumeration
+is deferred, which a single iterator method cannot do: its body does not run
+until the first `MoveNext`, so an argument fault would surface at some later
+`foreach` with nothing left to say which call caused it.
+
+**Ordering is promised: nondecreasing denominator, increasing value within one.**
+It is what the walk produces anyway, so it costs nothing. It is **not** height
+order, and the difference shows up inside a single denominator rather than across
+them: `1 ± 4` holds nine integers, so the first yielded is `-3/1` at height 3
+while the `0/1` it also holds has height 1. A caller wanting least height wants
+`HeightSweep`.
+
+**An empty enclosure set throws.** Nothing refutes, so every rational within the
+bound survives — infinitely many, the numerator being unbounded — and an empty
+result would report complete refutation from no evidence, the direction
+`AGENTS.md` § Exactness discipline forbids in *report the bound, not the verdict*.
+`Q = 0` yielding nothing is the other empty result and means "nothing was
+examined". The two are indistinguishable in the value and are told apart only by
+the bound reported beside it.
+
+**The per-denominator integer range is a rounding site that does not join the
+table**, and for a different reason than `HeightSweep.BestDenominator`. The
+integers `p` with `lo <= p/q <= hi` are exactly those with `lo*q <= p <= hi*q`,
+so the range is a ceiling and a floor of exact rationals — but the *direction* is
+not what is load-bearing. A wider range is merely wasteful, since the extra
+candidate is put to the same membership test and dropped by the seed. Measured:
+replacing the ceiling with a nearest rounding reddens nothing, while a range one
+short reddens thirteen tests at the lower end and fourteen at the upper. The
+hazard is a **float** bound landing one short, not a wrong direction, and
+exactness is governed already.
+
+That safety comes from the seed being re-tested alongside every other enclosure,
+so the exact range and the uniform membership test are **redundant with each
+other**. Removing both would look like one simplification and be two defects —
+the same pattern the reduced-pair skip above records, and the reason neither is
+described as an optimisation.
+
 ### `AffineConstant` — the one combinator
 
 `offset + scale · inner`, for any inner `IRealConstant`. No series, no
@@ -544,6 +632,23 @@ copies its input so a later change to the source has no effect. A run with no
 iterations yields an empty matrix, which is honestly empty rather than an error.
 
 ```csharp
+public static class SurvivorSearch
+{
+    // lazy; nondecreasing denominator, increasing value within one; each
+    // survivor yielded exactly once
+    public static IEnumerable<BigRational> Survivors(
+        IEnumerable<Approximation> enclosures, BigInteger denominatorBound);
+}
+```
+
+`Survivors` throws `ArgumentNullException` on a null sequence,
+`ArgumentException` on an empty one, and `ArgumentOutOfRangeException` on a
+negative bound — all **at the call**, not at the first step, which is why the
+method is not itself an iterator. `enclosures` is read once and copied, so a
+lazy sequence is a fine argument and a later change to the source has no effect.
+A bound of zero yields nothing, a denominator being positive.
+
+```csharp
 public sealed class AffineConstant : IRealConstant
 {
     public AffineConstant(
@@ -659,6 +764,30 @@ search yielded nothing, which only a defective approximator can do.
   to `private` as unnecessary surface and that test goes with it, the rule
   becomes undefended, and **nothing goes red**. Deleting the rule instead is also
   wrong: an oracle must be deterministic whether or not you can watch it choose.
+- **Do not decide a survivor on one enclosure — and do not trust a
+  two-enclosure fixture to catch it if you do.** `SurvivorSearch` seeds its walk
+  from the *narrowest* enclosure, so with only two of them a mutant deciding
+  membership on "the last" has already been filtered by the seed and returns the
+  right answer anyway. Fixture C, the non-nesting pair this type's brief singled
+  out for exactly this hazard, passed such a mutant; so did every other fixture
+  in the class, and so did the reversed-order check written precisely to vary
+  the seed. Catching it needs **three** enclosures with the sole refuter in the
+  middle, which is what
+  `Survivors_CanBeRefutedByAnEnclosureThatIsNeitherTheSeedNorTheLast` is.
+  Measured 2026-09-08 by that type's own mutation run, and the general shape is
+  worth carrying: a fixture chosen to exhibit a property can still be too small
+  to distinguish the mechanism from a cheaper wrong one beside it.
+- **`SurvivorSearch` must not be made an `IRationalApproximator`,** nor renamed
+  to carry `Sweep`. It differs in every obligation that interface imposes but
+  laziness — see § Architecture — and declaring the kinship, in the type list or
+  in the name, would make the compiler accept callers that cannot be correct.
+- **An empty survivor set means two different things,** and only the bound
+  reported beside it tells them apart. Against the exact enclosure on `1/7` a
+  bound of 6 yields nothing because the one rational that enclosure holds has a
+  denominator the bound never reaches — raise it to 7 and `1/7` appears. Against
+  two disjoint enclosures a bound of 60 yields nothing because nothing can
+  satisfy both, and no bound will change that. The first is a statement about
+  the budget, the second about the unknown, and the value is identical.
 - **Do not add a `bool` to the trend types.** The reflection test will fail, and
   that test is the intended place for the argument.
 - **An unbounded test of a search hangs rather than fails.** A defective search
@@ -711,20 +840,23 @@ search yielded nothing, which only a defective approximator can do.
   denominator 3 under a centred enclosure and at 43693 under this one. A control
   whose property survives only one of the two shapes is not testing what its
   name says.
-- **`AnalysisMode=All` has four times been the earlier witness this arc**, which
+- **`AnalysisMode=All` has six times been the earlier witness this arc**, which
   is the answer to anyone pricing its friction. `CA1859` turned the stale "hold
-  the interface" remedy above from prose into a build error. And in three
-  separate mutation runs the compiler or an analyzer refused the mutant before
-  any test could observe it: `CA1823` on `ConstantRun`, because removing the
-  held enumerator orphaned its `RefinementsEndedMessage`; `CS0219` on
-  `HeightSweep`, because removing the improvement filter orphaned its own
-  bookkeeping; and `CA1823` again on `HeightSweep`, because forcing the
-  numerator axis made the delegated `DenominatorSweep` unreachable. **"Did not
-  compile" is therefore a legitimate mutation-run outcome and not a failed
-  experiment** — it is the same finding a red test would have been, arriving
-  earlier, and it is the concrete evidence for this setting that the rest of
-  these docs assert without showing. None was a style complaint; each was the
-  first thing to notice a real change.
+  the interface" remedy above from prose into a build error. And five separate
+  mutants were refused by the compiler or an analyzer before any test could
+  observe them: `CA1823` on `ConstantRun`, because removing the held enumerator
+  orphaned its `RefinementsEndedMessage`; `CS0219` on `HeightSweep`, because
+  removing the improvement filter orphaned its own bookkeeping; `CA1823` again
+  on `HeightSweep`, because forcing the numerator axis made the delegated
+  `DenominatorSweep` unreachable; `CA1823` a third time on `SurvivorSearch`,
+  because replacing the empty-enclosure throw with an empty result orphaned its
+  `NoEnclosuresMessage`; and `CS0162` on the same type, because disabling the
+  reduced-pair skip through a constant-false condition left its `continue`
+  unreachable. **"Did not compile" is therefore a legitimate mutation-run
+  outcome and not a failed experiment** — it is the same finding a red test
+  would have been, arriving earlier, and it is the concrete evidence for this
+  setting that the rest of these docs assert without showing. None was a style
+  complaint; each was the first thing to notice a real change.
 
 ## Subproject-internal next steps
 

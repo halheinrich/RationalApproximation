@@ -44,6 +44,39 @@ internal static class BoundedSearch
         return candidates!;
     }
 
+    /// <summary>Runs work that must not hang, failing rather than hanging if it does not finish.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="RunToCompletion"/> without the count cap, for work that is not an
+    /// <see cref="IRationalApproximator"/> search. <see cref="SurvivorSearch"/> takes many
+    /// enclosures and returns rationals, so no cap on a candidate count applies to it - but the
+    /// hazard the class exists for is identical, and the latch has to be <i>shared</i> rather than
+    /// re-declared, or two abandoned threads become the worst case instead of one.
+    /// </para>
+    /// <para>
+    /// The property this is used for is laziness, which has no cheaper witness: a search that
+    /// built its result before returning it would be caught by nothing in its output, and would
+    /// hang against a bound no eager walk can finish. So the budget is the assertion.
+    /// </para>
+    /// </remarks>
+    public static T CompleteWithin<T>(Func<T> work, string description)
+        where T : class
+    {
+        Assert.False(overran, "An earlier search overran its budget; not starting another.");
+
+        T? result = default;
+        Task task = Task.Run(() => result = work());
+
+        if (!task.Wait(Budget))
+        {
+            overran = true;
+            Assert.Fail(Inv($"{description} did not finish within {Budget.TotalSeconds} seconds."));
+        }
+
+        Assert.NotNull(result);
+        return result!;
+    }
+
     /// <summary>
     /// Wraps an approximator so that a search handed to a consumer cannot yield without end.
     /// </summary>

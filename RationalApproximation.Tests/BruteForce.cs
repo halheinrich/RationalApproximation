@@ -88,6 +88,63 @@ internal static class BruteForce
     }
 
     /// <summary>
+    /// Finds every rational of denominator at or below the bound that lies in all of the given
+    /// enclosures, by intersecting the intervals first and enumerating afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The oracle for <see cref="SurvivorSearch"/>, and independent of it in both steps that could
+    /// go wrong. It never asks which enclosure is narrowest - a rational lies in every closed
+    /// interval exactly when it lies in their intersection, so the enclosures collapse to one pair
+    /// of endpoints before any candidate exists, and no candidate is ever put to an individual
+    /// enclosure. And it does no reduction test: every pair in range is handed to
+    /// <see cref="BigRational"/>, whose own lowest-terms invariant is what collapses <c>12/2</c>
+    /// onto <c>6/1</c>, so a set built this way cannot inherit a defect in the search's
+    /// greatest-common-divisor skip.
+    /// </para>
+    /// <para>
+    /// The result is ordered by value, which is <b>not</b> the order the search promises. That is
+    /// deliberate: this answers "which rationals" and the search's ordering is asserted separately,
+    /// so a test comparing the two cannot accidentally pass on order alone.
+    /// </para>
+    /// </remarks>
+    public static List<BigRational> SurvivorsByIntersection(
+        IReadOnlyList<Approximation> enclosures,
+        int denominatorBound)
+    {
+        BigRational lower = enclosures[0].Lower;
+        BigRational upper = enclosures[0].Upper;
+
+        foreach (Approximation enclosure in enclosures)
+        {
+            if (enclosure.Lower > lower)
+            {
+                lower = enclosure.Lower;
+            }
+
+            if (enclosure.Upper < upper)
+            {
+                upper = enclosure.Upper;
+            }
+        }
+
+        var found = new SortedSet<BigRational>(RationalOrder.Instance);
+
+        for (int q = 1; q <= denominatorBound; q++)
+        {
+            BigInteger smallest = BigRational.Round(lower * q, MidpointRounding.ToPositiveInfinity);
+            BigInteger largest = BigRational.Round(upper * q, MidpointRounding.ToNegativeInfinity);
+
+            for (BigInteger p = smallest; p <= largest; p++)
+            {
+                found.Add(new BigRational(p, q));
+            }
+        }
+
+        return [.. found];
+    }
+
+    /// <summary>
     /// Determines whether the given rational is the closest one of its own denominator to the
     /// target, checked against its two neighbours rather than by rounding.
     /// </summary>
