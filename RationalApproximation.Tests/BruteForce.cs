@@ -64,8 +64,10 @@ internal static class BruteForce
     /// Finds the least denominator at which some rational is inside the enclosure.
     /// </summary>
     /// <remarks>
-    /// This is the denominator bound the sweep is really claiming, and § 1 calls it the stronger
-    /// statement: it quantifies over every numerator rather than over a height. A rational
+    /// This is the denominator bound <see cref="DenominatorSweep"/> is really claiming, and § 1
+    /// calls it the stronger statement: it quantifies over every numerator rather than over a
+    /// height. <see cref="HeightSweep"/> above one claims a height bound instead, so the axis is
+    /// named here rather than left to "the sweep". A rational
     /// <c>p/q</c> lies in <c>[lo, hi]</c> exactly when the integer <c>p</c> lies in
     /// <c>[lo*q, hi*q]</c>, so the question is whether that interval holds an integer at all -
     /// decided here by a ceiling and a floor, with no reference to which one is nearest.

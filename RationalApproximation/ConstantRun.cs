@@ -1,7 +1,7 @@
 namespace HalHeinrich.Numerics;
 
 /// <summary>
-/// A complete run against a single real constant: enclose, sweep for rationals, iterate at
+/// A complete run against a single real constant: enclose, search for rationals, iterate at
 /// successively tighter targets, and assemble the trend matrix.
 /// </summary>
 /// <remarks>
@@ -28,14 +28,34 @@ namespace HalHeinrich.Numerics;
 /// whole matrix is read afterwards.
 /// </para>
 /// <para>
-/// <b>What the answer means.</b> A row of the matrix falling towards zero is the candidate the
-/// evidence favours; every other row settles at that candidate's true distance from the constant.
-/// Nothing finite establishes that the limit is zero. A vanishing row poses a conjecture, and the
-/// result that is reported is a denominator bound: the sweep proves that every rational of
-/// denominator at or below the last one searched misses the enclosure, for any numerator. A
-/// constant sitting just outside a low-height rational produces a row that has been flat since the
-/// first iteration and will stay flat at every reachable precision, which is a denominator bound
-/// and not a find.
+/// <b>What the answer means, and what decides it.</b> A row of the matrix falling towards zero
+/// would mean the candidate is the constant only in the limit, and no finite run reaches a limit;
+/// at any iteration a row falling towards a very small number is indistinguishable from one
+/// falling to zero. So the rows are not what decides. <see cref="SurvivorSearch"/> is: run over
+/// this run's enclosures - <see cref="ConstantIteration.Enclosure"/> from each of
+/// <see cref="Iterations"/> - under a denominator bound fixed in advance, it reports the rationals
+/// no enclosure excludes. A candidate outside any one enclosure is not the constant, permanently,
+/// so that set only shrinks and an empty tail to it is the refutation. The matrix is kept for what
+/// it is good at: showing a reader what the search is doing, and showing a near-miss <i>as</i> a
+/// near-miss.
+/// </para>
+/// <para>
+/// <b>A bound reported from a run must name the searcher that produced it</b>, because the axis
+/// follows the searcher and the two are not interchangeable.
+/// <see cref="Execute"/> takes the searcher as an argument and defaults it to
+/// <see cref="DenominatorSweep"/>, which enumerates denominators and so bounds them - for any
+/// numerator, which is the stronger claim. <see cref="HeightSweep"/> above one enumerates
+/// numerators instead and so bounds <i>height</i>, saying nothing about denominators;
+/// <see cref="HeightSweep.SearchesNumerators"/> is what tells a reporting site which it got. This
+/// paragraph read "the sweep" when there was one searcher. With two, a bound that does not name
+/// its searcher is not checkable - see <c>SPEC-rational-ratio.md</c> § 1.
+/// </para>
+/// <para>
+/// <b>A near miss is the case all of this exists to refuse.</b> A constant sitting just outside a
+/// low-height rational produces a row that has been flat since the first iteration and will stay
+/// flat at every reachable precision. Read as a trend that is indistinguishable from a find; read
+/// as membership it is settled the moment one enclosure excludes the candidate, and it never comes
+/// back.
 /// </para>
 /// <para>
 /// <b>What a run costs is not a function of its targets.</b> The refinement half is plannable -

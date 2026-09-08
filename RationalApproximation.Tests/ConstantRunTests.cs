@@ -220,7 +220,8 @@ public class ConstantRunTests
         }
 
         // A row settles at its candidate's true distance from the constant, which is non-zero for
-        // every candidate that is not the constant. What the run earns is a denominator bound.
+        // every candidate that is not the constant. What THIS run earns is a denominator bound,
+        // Execute having defaulted to DenominatorSweep - the axis follows the searcher.
         foreach (TrendRow row in run.Matrix.Rows)
         {
             Assert.True(

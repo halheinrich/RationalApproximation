@@ -818,9 +818,11 @@ search yielded nothing, which only a defective approximator can do.
   `|ε_k − δ|`, so while `ε_k ≫ δ` the row **falls at every column**, exactly as
   a genuine find does. It floors at `δ` and no schedule that does not pass `δ`
   can see the floor. Measured 2026-09-06 with `δ = 10⁻³⁰`: the row fell at every
-  one of five columns and nothing in the matrix separated it from an answer. A
-  run earns a denominator bound; a falling row is not a second, weaker verdict
-  that can be read alongside it.
+  one of five columns and nothing in the matrix separated it from an answer.
+  What a run earns is a bound on **the axis its searcher enumerates** — a
+  denominator bound under `DenominatorSweep`, a height bound under `HeightSweep`
+  above one — together with the survivor set under a bound fixed in advance. A
+  falling row is not a second, weaker verdict to be read alongside either.
 - **The scaling rule is stated twice in `AffineConstant`, deliberately, and must
   not be single-sourced.** `Refinements()` gets `|scale|` implicitly, from the
   `Abs` inside `Approximation.Multiply`; `ErrorBoundAt` states it explicitly as
