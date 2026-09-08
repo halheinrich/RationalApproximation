@@ -10,11 +10,20 @@ namespace HalHeinrich.Numerics;
 /// <para>
 /// <b>This type reports no verdict, and that is the design.</b> Since
 /// <c>|a/b - x_k|</c> tends to <c>|a/b - X|</c>, a row's limit is zero if and only if the
-/// candidate is the constant - so a row falling towards zero is the answer and every other row
-/// settles at that candidate's true distance from it. But recurrence is not required and must not
-/// be relied on: measured runs have shown a candidate holding steady for two consecutive
-/// iterations and then moving on, so any "unchanged for k rounds" rule with k = 2 gives a false
-/// positive on cases that have actually been observed.
+/// candidate is the constant, and every other row settles at that candidate's true distance from
+/// it. That is true and it is <b>unobservable</b>. At any finite iteration a row falling towards a
+/// very small number is indistinguishable from one falling to zero - a measured near-miss sat four
+/// orders of magnitude below the true answer's row before it died - so reading the limit off the
+/// rows is an inference the data does not support, however the rule is phrased. Recurrence fails
+/// on candidates that held steady for two consecutive iterations and then moved on; a plateau
+/// stops being flat when the height cap moves.
+/// </para>
+/// <para>
+/// <b>What decides instead is <see cref="SurvivorSearch"/>.</b> A candidate outside an enclosure
+/// of the unknown is not the unknown, permanently, so refutation is a proof where a falling row is
+/// a reading. This matrix stays because it is how a reader sees what the search is doing, and
+/// where a near-miss becomes visible <i>as</i> a near-miss; it is no longer what decides. See
+/// <c>SPEC-rational-ratio.md</c> § 2, "Why survivors rather than a trend".
 /// </para>
 /// <para>
 /// There is therefore deliberately no <c>IsConverged</c>, no <c>Answer</c>, and no

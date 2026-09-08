@@ -254,9 +254,12 @@ public class TrendMatrixTests
     [Fact]
     public void Rows_RecordAnExactZeroWhenAnIterationLandsOnTheCandidate()
     {
-        // "A row falling to zero is the answer" is a statement about a limit, but a cell can be
-        // exactly zero when an iteration's value happens to be the candidate. Nothing here treats
-        // that as a conclusion.
+        // A row's LIMIT being zero would mean the candidate is the constant. A single CELL being
+        // zero means only that one iteration's value happened to equal the candidate, which is an
+        // arithmetic coincidence at one column and says nothing about the unknown. The matrix
+        // records it and draws nothing from it - see SPEC-rational-ratio.md § 2, "Why survivors
+        // rather than a trend", which keeps the limit argument and retires the reading that was
+        // built on it.
         TrendMatrix matrix = TrendMatrix.Build(
         [
             IterationAt(Ratio(5, 1), Ratio(6, 1)),
