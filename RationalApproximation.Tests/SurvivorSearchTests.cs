@@ -399,6 +399,425 @@ public class SurvivorSearchTests
             Run([Enclosure(1, 1, 4, 1)], 1));
     }
 
+    // ---------- reachability and isolation: SPEC-rational-ratio.md § 2's two rules ----------
+    //
+    // Every rule here is tested against what Survivors returns, never against its own formula: the
+    // rules are claims about the search, and a test that recomputed 1/(2Qb) would agree with any
+    // wrong copy of it. That is how the isolation rule stayed wrong three times in prose - every
+    // check ever run had an integer target, where dropping b changes nothing.
+
+    /// <summary>
+    /// Targets above denominator 1, where the isolation rule's <c>b</c> is visible. The first two
+    /// are the n = 12 and n = 16 answers of <c>SPEC-rational-ratio.md</c> § 1, chosen for their
+    /// denominators 691 and 3617 - the size a real control carries - and the rest are small ones on
+    /// both sides of zero and on both sides of one.
+    /// </summary>
+    private static BigRational[] FractionalTargets() =>
+    [
+        new(638_512_875, 691),
+        new(325_641_566_250, 3617),
+        Ratio(7, 3),
+        Ratio(-5, 3),
+        Ratio(22, 7),
+        Ratio(1, 2),
+    ];
+
+    /// <summary>The small <see cref="FractionalTargets"/>, for sweeps too wide to afford the large two.</summary>
+    private static BigRational[] SmallFractionalTargets() => [Ratio(7, 3), Ratio(-5, 3), Ratio(22, 7), Ratio(1, 2)];
+
+    /// <summary>Integer targets, where the isolation bound is exact. Zero and a negative included.</summary>
+    private static BigRational[] IntegerTargets() => [Ratio(6, 1), Ratio(90, 1), Ratio(-3, 1), BigRational.Zero];
+
+    /// <summary>Just inside an exclusive bound - close enough that a rival at the bound is in reach of a looser rule.</summary>
+    private static BigRational JustBelow(BigRational bound) => bound * Ratio(999, 1000);
+
+    /// <summary>Just outside an exclusive bound.</summary>
+    private static BigRational JustAbove(BigRational bound) => bound * Ratio(1001, 1000);
+
+    /// <summary>
+    /// Enclosures of one half-width that all contain the target: with it at either end, at the
+    /// quarter points, and centred. The ends are the worst case the isolation rule is stated over.
+    /// A centred enclosure alone is the best case and pins nothing, which is the mistake the
+    /// umbrella's first check of this rule made.
+    /// </summary>
+    private static Approximation[] EnclosuresContaining(BigRational target, BigRational halfWidth) =>
+    [
+        Approximation.Create(target + halfWidth, halfWidth),
+        Approximation.Create(target + (halfWidth / 2), halfWidth),
+        Approximation.Create(target, halfWidth),
+        Approximation.Create(target - (halfWidth / 2), halfWidth),
+        Approximation.Create(target - halfWidth, halfWidth),
+    ];
+
+    /// <summary>
+    /// The least bound, at or above the target's denominator, at which a rival sits exactly
+    /// <c>1/(Q*b)</c> from the target on the given side - one of the residue classes in which
+    /// <c>SPEC-rational-ratio.md</c> § 2 says the isolation bound is attained.
+    /// </summary>
+    /// <remarks>
+    /// Found by scanning for an integral <c>p = (Q*a + side)/b</c>, which is the defining equation
+    /// <c>p*b - Q*a = side</c> solved for <c>p</c>, rather than by a modular inverse - so the
+    /// fixture is its own definition. The scan ends within <c>b</c> steps, since <c>a</c> and
+    /// <c>b</c> are coprime.
+    /// </remarks>
+    private static (BigInteger Bound, BigRational Rival) AttainingBound(BigRational target, int side)
+    {
+        BigInteger a = target.Numerator;
+        BigInteger b = target.Denominator;
+
+        for (BigInteger q = b; ; q++)
+        {
+            BigInteger scaled = (q * a) + side;
+            if (BigInteger.Remainder(scaled, b).IsZero)
+            {
+                return (q, new BigRational(scaled / b, q));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The bounds a fractional target's soundness is checked at: its own denominator and one past
+    /// it, twice it and one past that, and the two bounds at which the isolation bound is attained
+    /// - the sharpest, since there a rival sits exactly where a looser rule would reach it.
+    /// </summary>
+    private static BigInteger[] SoundnessBounds(BigRational target)
+    {
+        BigInteger b = target.Denominator;
+
+        return
+        [
+            .. new[] { b, b + 1, (2 * b) + 1, AttainingBound(target, -1).Bound, AttainingBound(target, +1).Bound }
+                .Distinct()
+                .Order(),
+        ];
+    }
+
+    /// <summary>Runs one enclosure's search and requires the target, and nothing else, to survive it.</summary>
+    private static void AssertAlone(BigRational target, BigInteger bound, Approximation enclosure)
+    {
+        List<BigRational> survivors = Run([enclosure], bound);
+
+        Assert.True(
+            survivors.Count == 1 && survivors[0] == target,
+            Inv($"{target} at Q = {bound} under {enclosure.Value} +/- {enclosure.MaxError}: ") +
+            Inv($"{survivors.Count} survivors, starting {string.Join(", ", survivors.Take(3))}."));
+    }
+
+    /// <summary>A search's survivors in ascending order, for comparing as a set.</summary>
+    private static List<BigRational> SortedRun(Approximation enclosure, BigInteger bound)
+    {
+        List<BigRational> sorted = Run([enclosure], bound);
+        sorted.Sort();
+        return sorted;
+    }
+
+    [Fact]
+    public void IsReachable_TurnsOnTheTargetsOwnDenominator_AsTheSearchDoes()
+    {
+        // An exact enclosure on the target holds nothing else, so whether the search returns the
+        // target is purely whether it proposed it - the question the predicate answers, reached
+        // without its formula.
+        int reached = 0;
+        int missed = 0;
+        BigRational[] targets = [.. IntegerTargets(), .. FractionalTargets()];
+
+        foreach (BigRational target in targets)
+        {
+            BigInteger b = target.Denominator;
+
+            foreach (BigInteger bound in new[] { b - 1, b, b + 1 })
+            {
+                bool expected = bound >= b;
+                bool searched = Run([Approximation.Exact(target)], bound).Contains(target);
+
+                Assert.Equal(expected, SurvivorSearch.IsReachable(target, bound));
+                Assert.True(
+                    searched == expected,
+                    Inv($"The search {(searched ? "proposed" : "did not propose")} {target} at Q = {bound}."));
+
+                if (expected)
+                {
+                    reached++;
+                }
+                else
+                {
+                    missed++;
+                }
+            }
+        }
+
+        Assert.True(reached > 0 && missed > 0, Inv($"{reached} reached and {missed} missed: one side is unexercised."));
+    }
+
+    [Fact]
+    public void IsReachable_AtBoundZero_IsFalse_BecauseThatIsWhatTheSearchReturns()
+    {
+        // Survivors accepts a bound of zero and examines nothing there, so the predicate answers
+        // rather than refusing: one type, one definition of a valid bound.
+        BigRational[] targets = [BigRational.Zero, Ratio(6, 1), Ratio(7, 3)];
+
+        foreach (BigRational target in targets)
+        {
+            Assert.False(SurvivorSearch.IsReachable(target, 0));
+            Assert.Empty(Run([Approximation.Exact(target)], 0));
+        }
+    }
+
+    [Fact]
+    public void Survivors_JustBelowTheIsolationBound_AreExactlyTheTarget_WhereverTheCentreSits()
+    {
+        // Soundness, worst case, above denominator 1 - the case that tells 1/(2Qb) from 1/(2Q).
+        // Every enclosure contains the target, and two of the five have it at an end.
+        int searched = 0;
+
+        foreach (BigRational target in FractionalTargets())
+        {
+            foreach (BigInteger bound in SoundnessBounds(target))
+            {
+                BigRational halfWidth = JustBelow(SurvivorSearch.ExclusiveIsolationBound(target, bound));
+                Assert.True(SurvivorSearch.IsIsolated(target, bound, halfWidth));
+
+                foreach (Approximation enclosure in EnclosuresContaining(target, halfWidth))
+                {
+                    AssertAlone(target, bound, enclosure);
+                    searched++;
+                }
+            }
+        }
+
+        Assert.True(searched >= FractionalTargets().Length * 4 * 5, Inv($"Only {searched} searches ran."));
+    }
+
+    [Fact]
+    public void Survivors_AtTheIsolationBound_AdmitARival_WhenTheTargetIsAnInteger()
+    {
+        // At denominator 1 the bound is exact: at the bound itself a rival target +/- 1/Q is in
+        // reach of an enclosure with the target at the facing end, and just below it is not. That
+        // is why the inequality is strict - and why this test alone cannot see b dropped.
+        foreach (BigRational target in IntegerTargets())
+        {
+            foreach (BigInteger bound in new BigInteger[] { 1, 2, 7, 64, 100 })
+            {
+                BigRational exclusiveBound = SurvivorSearch.ExclusiveIsolationBound(target, bound);
+                BigRational step = new(BigInteger.One, bound);
+
+                Assert.False(SurvivorSearch.IsIsolated(target, bound, exclusiveBound));
+                Assert.Equal(
+                    new[] { target, target + step },
+                    SortedRun(Approximation.Create(target + exclusiveBound, exclusiveBound), bound));
+                Assert.Equal(
+                    new[] { target - step, target },
+                    SortedRun(Approximation.Create(target - exclusiveBound, exclusiveBound), bound));
+
+                BigRational inside = JustBelow(exclusiveBound);
+                Assert.True(SurvivorSearch.IsIsolated(target, bound, inside));
+                AssertAlone(target, bound, Approximation.Create(target + inside, inside));
+                AssertAlone(target, bound, Approximation.Create(target - inside, inside));
+            }
+        }
+    }
+
+    [Fact]
+    public void IsolationBound_AboveDenominatorOne_IsAttained_AtTheBoundsWhereARivalSitsClosest()
+    {
+        // The only test that sees a bound too SMALL. A smaller bound is always sound, so every
+        // soundness test passes it, and 1/(2Q*b^2) equals 1/(2Q*b) at b = 1, so every integer test
+        // passes it too. What fails it is a rival exactly 2x the bound from the target - which
+        // exists only at bounds chosen from the residue classes, so they are chosen, never assumed.
+        // At an arbitrary bound above denominator 1 no rival need be there, and asserting one would
+        // be false.
+        int attained = 0;
+
+        foreach (BigRational target in FractionalTargets())
+        {
+            foreach (int side in new[] { -1, +1 })
+            {
+                (BigInteger bound, BigRational rival) = AttainingBound(target, side);
+
+                // The fixture's own claims: in lowest terms at that bound, and on the side asked for.
+                Assert.Equal(bound, rival.Denominator);
+                Assert.Equal(side, (rival - target).Sign);
+
+                BigRational exclusiveBound = SurvivorSearch.ExclusiveIsolationBound(target, bound);
+
+                // The bound is exactly half the rival's distance - pinned by geometry the fixture
+                // found independently, not by restating the formula.
+                Assert.Equal(BigRational.Abs(rival - target), 2 * exclusiveBound);
+
+                List<BigRational> expected = [target, rival];
+                expected.Sort();
+
+                Assert.Equal(
+                    expected,
+                    SortedRun(Approximation.Create(target + (side * exclusiveBound), exclusiveBound), bound));
+                attained++;
+            }
+        }
+
+        Assert.Equal(FractionalTargets().Length * 2, attained);
+    }
+
+    [Fact]
+    public void IsIsolated_AgreesWithTheSearch_OnBothSidesOfTheBound()
+    {
+        // The rule is a claim about what the search returns, so it is tested against the search.
+        // Wherever it says yes, every enclosure of that half-width containing the target leaves the
+        // target alone. At an integer target the converse holds too; above denominator 1 a no is
+        // not a claim that a rival survives, since the bound is sufficient and not exact there.
+        int yes = 0;
+        int no = 0;
+        BigRational[] targets = [.. IntegerTargets(), .. SmallFractionalTargets()];
+
+        foreach (BigRational target in targets)
+        {
+            BigInteger b = target.Denominator;
+
+            for (BigInteger bound = b; bound <= (3 * b) + 2; bound++)
+            {
+                BigRational exclusiveBound = SurvivorSearch.ExclusiveIsolationBound(target, bound);
+
+                BigRational[] halfWidths =
+                [
+                    BigRational.Zero,
+                    exclusiveBound / 2,
+                    JustBelow(exclusiveBound),
+                    exclusiveBound,
+                    JustAbove(exclusiveBound),
+                    2 * exclusiveBound,
+                ];
+
+                foreach (BigRational halfWidth in halfWidths)
+                {
+                    if (SurvivorSearch.IsIsolated(target, bound, halfWidth))
+                    {
+                        foreach (Approximation enclosure in EnclosuresContaining(target, halfWidth))
+                        {
+                            AssertAlone(target, bound, enclosure);
+                        }
+
+                        yes++;
+                    }
+                    else
+                    {
+                        if (b.IsOne)
+                        {
+                            List<BigRational> crowded = Run([Approximation.Create(target + halfWidth, halfWidth)], bound);
+                            Assert.True(
+                                crowded.Count > 1,
+                                Inv($"IsIsolated said no to {target} at Q = {bound}, +/- {halfWidth}, and nothing else survived."));
+                        }
+
+                        no++;
+                    }
+                }
+            }
+        }
+
+        // A grid that never said yes would pass the first branch vacuously, and one that never
+        // said no would never exercise the strictness.
+        Assert.True(yes > 0 && no > 0, Inv($"{yes} yes and {no} no: one answer never occurred."));
+    }
+
+    [Fact]
+    public void IsIsolated_IsStrictlyBelowTheExclusiveBound()
+    {
+        BigRational[] targets = [Ratio(6, 1), Ratio(7, 3), new(638_512_875, 691)];
+
+        foreach (BigRational target in targets)
+        {
+            BigInteger bound = target.Denominator + 3;
+            BigRational exclusiveBound = SurvivorSearch.ExclusiveIsolationBound(target, bound);
+
+            Assert.True(SurvivorSearch.IsIsolated(target, bound, BigRational.Zero));
+            Assert.True(SurvivorSearch.IsIsolated(target, bound, JustBelow(exclusiveBound)));
+            Assert.False(SurvivorSearch.IsIsolated(target, bound, exclusiveBound));
+            Assert.False(SurvivorSearch.IsIsolated(target, bound, JustAbove(exclusiveBound)));
+        }
+    }
+
+    [Fact]
+    public void ExclusiveIsolationBound_ReachedByCoarsening_LosesTheProofOfIsolation_NotTheResult()
+    {
+        // The trap the name exists for. At an integer target under a power-of-two bound the
+        // exclusive bound is itself a power of two, so an enclosure strictly inside it coarsens
+        // onto it. What that loses is the PROOF: the half-width now held no longer establishes
+        // isolation, since an enclosure of that half-width with the target at its end admits a
+        // rival. The result itself stands, because coarsening keeps the centre the narrower radius
+        // placed - which is exactly why a caller must ask of the half-width held, and not assume.
+        BigRational target = Ratio(6, 1);
+        BigInteger bound = 64;
+        BigRational exclusiveBound = SurvivorSearch.ExclusiveIsolationBound(target, bound);
+
+        Assert.True(IsPowerOfTwo(exclusiveBound));
+
+        BigRational narrower = exclusiveBound * Ratio(3, 4);
+        Approximation refined = Approximation.Create(target + narrower, narrower);
+        Approximation coarsened = refined.Coarsen();
+
+        Assert.True(SurvivorSearch.IsIsolated(target, bound, refined.MaxError));
+        Assert.Equal(exclusiveBound, coarsened.MaxError);
+        Assert.False(SurvivorSearch.IsIsolated(target, bound, coarsened.MaxError));
+
+        AssertAlone(target, bound, coarsened);
+        Assert.Equal(
+            new[] { target, Ratio(385, 64) },
+            SortedRun(Approximation.Create(target + exclusiveBound, exclusiveBound), bound));
+    }
+
+    [Fact]
+    public void ANegativeBound_IsRefusedIdenticallyByEveryMemberTakingOne()
+    {
+        // One definition of a valid bound for the whole type, observable as one refusal.
+        BigRational target = Ratio(7, 3);
+
+        ArgumentOutOfRangeException[] refusals =
+        [
+            Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.Survivors([Enclosure(6, 1, 1, 10)], -1)),
+            Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.IsReachable(target, -1)),
+            Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.ExclusiveIsolationBound(target, -1)),
+            Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.IsIsolated(target, -1, BigRational.Zero)),
+        ];
+
+        Assert.All(refusals, refusal => Assert.Equal("denominatorBound", refusal.ParamName));
+        Assert.Single(refusals.Select(refusal => refusal.Message).Distinct());
+    }
+
+    [Fact]
+    public void Isolation_AtABoundTheTargetCannotReach_IsRefusedRatherThanAnsweredNo()
+    {
+        // Below the target's denominator the survivor set is empty, not crowded, so there is no
+        // true answer to "is it isolated". A no would report the crowded failure for the empty
+        // one, collapsing the two directions SPEC § 2 keeps apart.
+        string negativeMessage = Assert.Throws<ArgumentOutOfRangeException>(
+            () => SurvivorSearch.IsReachable(Ratio(6, 1), -1)).Message;
+
+        foreach ((BigRational target, BigInteger bound) in new (BigRational, BigInteger)[]
+        {
+            (Ratio(6, 1), 0),
+            (Ratio(7, 3), 2),
+            (new(325_641_566_250, 3617), 3616),
+        })
+        {
+            ArgumentOutOfRangeException fromBound = Assert.Throws<ArgumentOutOfRangeException>(
+                () => SurvivorSearch.ExclusiveIsolationBound(target, bound));
+            ArgumentOutOfRangeException fromPredicate = Assert.Throws<ArgumentOutOfRangeException>(
+                () => SurvivorSearch.IsIsolated(target, bound, BigRational.Zero));
+
+            Assert.Equal("denominatorBound", fromBound.ParamName);
+            Assert.Equal("denominatorBound", fromPredicate.ParamName);
+            Assert.NotEqual(negativeMessage, fromBound.Message);
+        }
+    }
+
+    [Fact]
+    public void IsIsolated_WithANegativeHalfWidth_Throws()
+    {
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => SurvivorSearch.IsIsolated(Ratio(7, 3), 5, Ratio(-1, 100)));
+
+        Assert.Equal("halfWidth", thrown.ParamName);
+    }
+
     /// <summary>
     /// An enclosure sequence that counts how often it is enumerated, for the one claim the values
     /// returned cannot carry.

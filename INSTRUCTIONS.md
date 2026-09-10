@@ -400,6 +400,41 @@ other**. Removing both would look like one simplification and be two defects —
 the same pattern the reduced-pair skip above records, and the reason neither is
 described as an optimisation.
 
+**It implements `../SPEC-rational-ratio.md` § 2's two rational-target rules,
+once** — `IsReachable`, and `IsIsolated` with `ExclusiveIsolationBound` the
+number it decides against. The rules and their model are stated in the spec and
+nowhere in this repo; the XML docs carry each member's contract and cite it.
+They live here because a restated copy of the isolation rule was wrong three
+times, each version agreeing with the others at denominator 1, the only case any
+control had run (`halheinrich/Math#64`). Three decisions:
+
+- **Two rules, two members, and no conjunction.** They fail in opposite
+  directions — an unreachable target is refuted falsely, an unisolated one
+  stands among rivals — and one yes-or-no would fold them back into the single
+  rule the spec's § 1 once misread them as.
+- **One definition of a valid bound for the type.** `ThrowIfInvalidBound` is
+  the only place a bound is judged, and every member calls it. So
+  `IsReachable(target, 0)` is `false` rather than refused — zero is a bound
+  `Survivors` accepts, and nothing is what it returns there. Isolation below the
+  target's denominator *is* refused: the survivor set there is empty rather
+  than crowded, so neither yes nor no is true, and a no would report the crowded
+  failure for the empty one.
+- **The predicate takes a half-width**, not an `Approximation`, because both
+  rules are wanted before a run, when no enclosure exists. A caller holding one
+  passes its `MaxError` as held.
+
+**The tests check each rule against `Survivors`, never against its own
+formula**, and soundness at the worst-case centres — the target at either end —
+since a centred enclosure is the best case and pins nothing. Above denominator 1
+the bound is attained only at some `Q`, so the one test that sees a bound too
+*small* finds those `Q` from the defining congruence rather than assuming one.
+Measured by mutation, 2026-09-10: dropping the target's denominator reddens
+three tests and no integer-target test, which is how the error survived in
+prose; squaring it reddens that congruence test alone; `<=` for the predicate's
+`<` reddens four, as does `>` for reachability's `>=`; deleting the reachability
+refusal does not compile (`CA1823`), and narrowing it to refuse only a bound of
+zero reddens the refusal test alone.
+
 ### `AffineConstant` — the one combinator
 
 `offset + scale · inner`, for any inner `IRealConstant`. No series, no
@@ -638,6 +673,14 @@ public static class SurvivorSearch
     // survivor yielded exactly once
     public static IEnumerable<BigRational> Survivors(
         IEnumerable<Approximation> enclosures, BigInteger denominatorBound);
+
+    // SPEC § 2's rational-target rules; the spec states them, these implement them
+    public static bool IsReachable(
+        BigRational target, BigInteger denominatorBound);
+    public static BigRational ExclusiveIsolationBound(     // EXCLUSIVE: isolates
+        BigRational target, BigInteger denominatorBound);  // only strictly below
+    public static bool IsIsolated(
+        BigRational target, BigInteger denominatorBound, BigRational halfWidth);
 }
 ```
 
@@ -647,6 +690,13 @@ negative bound — all **at the call**, not at the first step, which is why the
 method is not itself an iterator. `enclosures` is read once and copied, so a
 lazy sequence is a fine argument and a later change to the source has no effect.
 A bound of zero yields nothing, a denominator being positive.
+
+All four members refuse a negative bound with the same
+`ArgumentOutOfRangeException`, from one check. `IsReachable` answers every other
+bound, zero included. `ExclusiveIsolationBound` and `IsIsolated` also throw
+`ArgumentOutOfRangeException` on `denominatorBound` when `IsReachable` is
+false, and `IsIsolated` on a negative `halfWidth`; a zero half-width is an exact
+enclosure and is permitted.
 
 ```csharp
 public sealed class AffineConstant : IRealConstant
@@ -788,6 +838,21 @@ search yielded nothing, which only a defective approximator can do.
   two disjoint enclosures a bound of 60 yields nothing because nothing can
   satisfy both, and no bound will change that. The first is a statement about
   the budget, the second about the unknown, and the value is identical.
+- **Do not refine *to* `ExclusiveIsolationBound`.** It is exclusive, while this
+  library's refinement contracts are inclusive — `StepFor`, `ApproximateTo`
+  and `ConstantRun` all stop at or below a target — so refining to it may return
+  an enclosure of exactly that half-width, and one of those with the target at
+  an end can reach a rival. `Coarsen` compounds it: at an integer target under a
+  power-of-two `Q` the bound is itself a power of two, so an enclosure strictly
+  inside it can be coarsened onto it. A strict bound has no inclusive equivalent
+  over the rationals, so no value handed to an at-or-below refiner is "exactly
+  isolating", and the name carries the exclusivity to every call site for that
+  reason. Refine, ask `IsIsolated` of the half-width actually held after any
+  coarsening, and refine again while it says no. **What coarsening loses is the
+  proof, not the result** — measured 2026-09-10, an enclosure coarsened onto the
+  bound still leaves the target alone, because coarsening keeps a centre the
+  narrower radius placed; but the half-width held no longer establishes it, and
+  a claim here is only as good as its proof.
 - **Do not add a `bool` to the trend types.** The reflection test will fail, and
   that test is the intended place for the argument.
 - **An unbounded test of a search hangs rather than fails.** A defective search
