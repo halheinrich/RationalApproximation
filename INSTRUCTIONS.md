@@ -907,9 +907,9 @@ search yielded nothing, which only a defective approximator can do.
   denominator 3 under a centred enclosure and at 43693 under this one. A control
   whose property survives only one of the two shapes is not testing what its
   name says.
-- **`AnalysisMode=All` has six times been the earlier witness this arc**, which
+- **`AnalysisMode=All` has seven times been the earlier witness this arc**, which
   is the answer to anyone pricing its friction. `CA1859` turned the stale "hold
-  the interface" remedy above from prose into a build error. And five separate
+  the interface" remedy above from prose into a build error. And six separate
   mutants were refused by the compiler or an analyzer before any test could
   observe them: `CA1823` on `ConstantRun`, because removing the held enumerator
   orphaned its `RefinementsEndedMessage`; `CS0219` on `HeightSweep`, because
@@ -917,13 +917,15 @@ search yielded nothing, which only a defective approximator can do.
   on `HeightSweep`, because forcing the numerator axis made the delegated
   `DenominatorSweep` unreachable; `CA1823` a third time on `SurvivorSearch`,
   because replacing the empty-enclosure throw with an empty result orphaned its
-  `NoEnclosuresMessage`; and `CS0162` on the same type, because disabling the
+  `NoEnclosuresMessage`; `CS0162` on the same type, because disabling the
   reduced-pair skip through a constant-false condition left its `continue`
-  unreachable. **"Did not compile" is therefore a legitimate mutation-run
-  outcome and not a failed experiment** — it is the same finding a red test
-  would have been, arriving earlier, and it is the concrete evidence for this
-  setting that the rest of these docs assert without showing. None was a style
-  complaint; each was the first thing to notice a real change.
+  unreachable; and `CA1823` a fourth time, on `SurvivorSearch` again, because
+  removing `ExclusiveIsolationBound`'s unreachable-target refusal orphaned its
+  `UnreachableIsolationMessage`. **"Did not compile" is therefore a legitimate
+  mutation-run outcome and not a failed experiment** — it is the same finding a
+  red test would have been, arriving earlier, and it is the concrete evidence for
+  this setting that the rest of these docs assert without showing. None was a
+  style complaint; each was the first thing to notice a real change.
 
 ## Subproject-internal next steps
 
