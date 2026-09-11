@@ -43,10 +43,14 @@ namespace HalHeinrich.Numerics;
 /// <para>
 /// <b>This type is never optimised</b>, for the same reason its sibling is not: its only product
 /// is trust. It costs a factor of the target's magnitude more than the sweep, and that is not
-/// slack to reclaim. The two searches end at the same rational, the sweep having reached its
-/// denominator and this having reached its numerator, so the ratio of the indices they examine
-/// <i>is</i> the target - a target near <c>25.79</c> ends at <c>129/5</c>, which is 129 numerators
-/// against 5 denominators. Being slower is the price of enumerating the order a reader can follow.
+/// slack to reclaim. Where the enclosure contains at most one integer the two searches end at the
+/// same rational, the sweep having reached its denominator and this having reached its numerator,
+/// so the ratio of the indices they examine <i>is</i> the target - a target near <c>25.79</c> at a
+/// radius of <c>1/100</c> ends at <c>129/5</c>, which is 129 numerators against 5 denominators.
+/// With two or more integers enclosed they can part, which is the difference
+/// <see cref="Search"/>'s remarks describe: both stop at an integer, the sweep at the one nearest
+/// the value and this at the one of least magnitude. Being slower is the price of enumerating the
+/// order a reader can follow.
 /// </para>
 /// <para>
 /// The search always terminates. An enclosure's value is a <see cref="BigRational"/> <c>n/d</c> in
