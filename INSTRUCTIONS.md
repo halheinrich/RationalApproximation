@@ -258,9 +258,11 @@ decision**, which is why it does not join the two in the table above.
 **Its terminal is the least-height enclosed rational without qualification**,
 which is where it differs from its sibling; § Pitfalls owns that divergence. It
 costs a factor of the target's magnitude more, and that is not slack to reclaim:
-both searches end at the *same* rational, one having reached its denominator and
-the other its numerator, so the ratio of indices examined **is** the target.
-Measured on `7919/307`: 129 against 5, and 1006 against 39 one target tighter.
+where the enclosure contains at most one integer, both searches end at the
+*same* rational, one having reached its denominator and the other its numerator,
+so the ratio of indices examined **is** the target. With two or more integers
+enclosed they can part. Measured on `7919/307`, inside the holding case: 129
+against 5 at a radius of `1/100`, and 1006 against 39 at `1/10000`.
 
 **The reduced-pair skip is an early-out, not a correctness device.** A
 non-reduced pair equals one of smaller numerator whose own best denominator was

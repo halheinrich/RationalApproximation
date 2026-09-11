@@ -74,10 +74,13 @@ public sealed class ConstantIteration
     /// </summary>
     /// <exception cref="InvalidOperationException">The search yielded no candidates at all.</exception>
     /// <remarks>
-    /// This is the least-denominator rational the evidence permits unconditionally, and the
+    /// Which rational that is belongs to the order of the searcher the run was given, not to this
+    /// type - see <c>SPEC-rational-ratio.md</c> § 3. Under <see cref="DenominatorSweep"/>, the
+    /// default, it is the least-denominator rational the evidence permits unconditionally, and the
     /// least-height one whenever the enclosure's <see cref="Approximation.MaxError"/> is below
     /// <c>1/2</c> - a condition this bench's enclosures are nowhere near violating, but one worth
-    /// stating rather than relying on silently.
+    /// stating rather than relying on silently. Under <see cref="HeightSweep"/> it is the
+    /// least-height one without qualification.
     /// </remarks>
     public RationalCandidate Simplest =>
         Candidates.Count > 0 ? Candidates[^1] : throw new InvalidOperationException(NoCandidatesMessage);

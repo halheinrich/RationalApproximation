@@ -21,11 +21,11 @@ namespace HalHeinrich.Numerics.Tests;
 /// <para>
 /// <b>Every schedule here was chosen by measurement, not from a law.</b> Sweep depth is not a
 /// function of the target error: at the same error of 3.8e-6 the near-miss control terminates at
-/// denominator 1 and the out-of-reach control at 1597, and a target sitting just outside a
-/// low-height rational can cost 1/(2*q*e) where a generic one costs e^(-1/2). The
-/// out-of-reach schedule in particular was picked from three candidates because it is the one
-/// whose answer advances at <i>every</i> step; a neighbouring schedule repeats a candidate and
-/// would fail the exclusion criterion.
+/// denominator 1 and the out-of-reach control at 1597. How deep a search goes, and why no law
+/// sizes it, is <c>SPEC-rational-ratio.md</c> § 2, "What a search costs", and is not restated
+/// here. The out-of-reach schedule in particular was picked from three candidates because it is
+/// the one whose answer advances at <i>every</i> step; a neighbouring schedule repeats a candidate
+/// and would fail the exclusion criterion.
 /// </para>
 /// </remarks>
 public class ConstantRunTests
