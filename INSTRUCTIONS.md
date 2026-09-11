@@ -456,6 +456,12 @@ inner's strict improvement carries through, so nothing was weakened to admit
 this type — and that is what keeps an exact enclosure unreachable through any
 conforming provider.
 
+That is the answer to the route halheinrich/Math#58 fears, a runner handed a
+constant that happens to be exact: no conforming constant is one. It does not
+close the direct route. `Approximation.Exact` is public, so a caller can still
+hand `DenominatorSweep.Search` a zero-width enclosure and wait for the value's
+own denominator, and that call is what the issue's proposed guard would refuse.
+
 `StepFor` is re-declared and delegates to `Inner.StepFor(target / |scale|)`,
 exactly rather than approximately, since `|scale| > 0` makes the two conditions
 equivalent under exact division. `ApproximateTo` is deliberately left on the
@@ -949,6 +955,13 @@ search yielded nothing, which only a defective approximator can do.
   unrepresentable — which changes `ConstantRun.Execute`'s signature and requires
   `Zeta` to change with it. That is a planned two-repo change, not a cheap one,
   and it is why the duplication was left standing rather than papered over.
+  **The name is already taken.** `Zeta` ships a `static class TargetSchedule`
+  (`../Zeta/Zeta/TargetSchedule.cs`), a generator of power-of-ten schedules for
+  `RatioRun` — a different thing, whose own remarks discuss this very proposal.
+  Both repos use the `HalHeinrich.Numerics` namespace and `Zeta` references this
+  layer, so a validated type of that name here would share a fully qualified
+  name with the generator inside `Zeta`'s compilation. Whoever builds it
+  chooses another name or reconciles the two deliberately; neither is decided.
 
 Cross-cutting obligations that need `RealConstants` — the spec's positive and
 negative controls, and demonstrating on a real run the behaviour the trend
