@@ -953,8 +953,9 @@ search yielded nothing, which only a defective approximator can do.
   free to skip it. The right one is a validated value type constructed through a
   factory, the shape `Approximation` already uses so that a negative radius is
   unrepresentable — which changes `ConstantRun.Execute`'s signature and requires
-  `Zeta` to change with it. That is a planned two-repo change, not a cheap one,
-  and it is why the duplication was left standing rather than papered over.
+  `Zeta` to change with it. That is a two-repo change that has not been planned
+  — no issue tracks it — and not a cheap one, and it is why the duplication was
+  left standing rather than papered over.
   **The name is already taken.** `Zeta` ships a `static class TargetSchedule`
   (`../Zeta/Zeta/TargetSchedule.cs`), a generator of power-of-ten schedules for
   `RatioRun` — a different thing, whose own remarks discuss this very proposal.

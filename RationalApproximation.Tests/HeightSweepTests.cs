@@ -174,10 +174,12 @@ public class HeightSweepTests
         // than for being any particular quantity: this layer holds no concrete constants, and a
         // decimal truncation of an interesting real would be one wearing a disguise.
         //
-        // The cost of height order falls straight out of this. Both searches end at the SAME
-        // rational, the sweep having reached its denominator and this having reached its
-        // numerator, so the ratio of the indices they examine is the target itself - 129 against
-        // 5 here, and 1006 against 39 one target tighter.
+        // The cost of height order falls straight out of this. Neither enclosure here contains an
+        // integer, and wherever at most one is enclosed both searches end at the SAME rational,
+        // the sweep having reached its denominator and this having reached its numerator, so the
+        // ratio of the indices they examine is the target itself - 129 against 5 here, and 1006
+        // against 39 one target tighter. With two or more integers enclosed they can part; see
+        // HeightSweep's remarks.
         foreach ((BigRational error, BigRational expected) in new[]
         {
             (Ratio(1, 100), Ratio(129, 5)),
