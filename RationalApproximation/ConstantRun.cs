@@ -52,21 +52,21 @@ namespace HalHeinrich.Numerics;
 /// </para>
 /// <para>
 /// <b>A near miss is the case all of this exists to refuse.</b> A constant sitting just outside a
-/// low-height rational produces a row that has been flat since the first iteration and will stay
-/// flat at every reachable precision. Read as a trend that is indistinguishable from a find; read
-/// as membership it is settled the moment one enclosure excludes the candidate, and it never comes
-/// back.
+/// low-height rational produces a row that falls at every column, exactly as a genuine find would,
+/// for as long as the target error stays well above the constant's distance from that rational.
+/// The row levels off only near that distance, and a schedule that stops short of it never sees
+/// the floor. Read as a trend that is indistinguishable from a find at every reachable precision;
+/// read as membership it is settled the moment one enclosure excludes the candidate, and it never
+/// comes back.
 /// </para>
 /// <para>
 /// <b>What a run costs is not a function of its targets.</b> The refinement half is plannable -
 /// <see cref="IRealConstant.StepFor"/> answers it without pulling a single refinement. The search
 /// half is not, and not for want of a helper here: the depth
 /// <see cref="IRationalApproximator.Search"/> reaches depends on the continued-fraction structure
-/// of the unknown, which is what an investigation does not know. Two regimes have been measured. A
-/// generic target costs about <c>e^(-1/2)</c> denominators; a target sitting just outside a
-/// rational of denominator <c>q</c>, with the enclosure too narrow to reach it, costs about
-/// <c>1/(2*q*e)</c>. Those differ by a factor of 72 at <c>e = 3.8e-6</c> and by 2.4e8 at
-/// <c>1e-18</c>, and the expensive regime is exactly the near-miss shape this bench exists to
+/// of the unknown, which is what an investigation does not know. <c>SPEC-rational-ratio.md</c>
+/// § 2, "What a search costs", owns the two measured regimes and how far apart they fall; they are
+/// not restated here, and the expensive one is exactly the near-miss shape this bench exists to
 /// refuse. <b>So a caller must never assume a schedule is affordable because a law says so.</b>
 /// </para>
 /// </remarks>
