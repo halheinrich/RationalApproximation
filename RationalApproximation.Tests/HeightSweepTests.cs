@@ -143,8 +143,10 @@ public class HeightSweepTests
         // Restricted to enclosures holding fewer than two integers, and to targets above one.
         // Above one the two searches are genuinely different code; at or below one HeightSweep
         // DELEGATES to DenominatorSweep, so agreement there is a tautology and proves nothing. The
-        // two-integer case is excluded because they provably differ there - it has its own test
-        // above. Measured over 5387 enclosures above one, those are the only disagreements.
+        // two-integer case is excluded because they can differ there, which is reason enough: this
+        // test compares terminals, and there the two types are not required to share one - the
+        // divergence has its own test above. Measured over 5387 enclosures above one, those are
+        // the only disagreements.
         int compared = 0;
 
         foreach (Approximation enclosure in Targets())

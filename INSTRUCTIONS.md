@@ -189,9 +189,8 @@ could be imposed**, since `d` is one, but because such a bound is a *budget* and
 never a correctness device. It buys a legible refusal in place of an
 astronomically long but finite run, and how long a run is worth waiting for is
 the caller's question rather than the type's. The gap is wide: against a target
-of `7919/307` the sweep stops at denominator 39 while `d` is 307, and a
-provider's enclosure carries a value whose denominator has as many digits as its
-precision. This rationale replaced one saying no bound *existed* and arguing
+of `7919/307` the sweep stops at denominator 39 while `d` is 307. This
+rationale replaced one saying no bound *existed* and arguing
 from that against ever imposing one — both halves wrong, and the second argued
 against the very cap the test suite already runs under.
 
@@ -493,10 +492,12 @@ Nothing coarsens here. The provider's realised `MaxError` is already proven and
 exact, so widening it would only lose accuracy; the ratio pipeline coarsens
 because a *propagated* bound grows, and that reason does not reach this far.
 
-**What a run costs is not a function of its targets**, and the type's own
-remarks carry the two measured regimes. The consequence for a caller is the
-part that belongs here: a schedule is never affordable because a law says so,
-and the expensive regime is the near-miss shape this bench exists to refuse.
+**What a run costs is not a function of its targets.** The two measured
+regimes belong to `../SPEC-rational-ratio.md` § 2, "What a search costs", and
+the type's own remarks point there rather than restate them. The consequence
+for a caller is the part that belongs here: a schedule is never affordable
+because a law says so, and the expensive regime is the near-miss shape this
+bench exists to refuse.
 
 ### Internal pattern: a mechanism is never its own oracle
 
@@ -800,10 +801,13 @@ search yielded nothing, which only a defective approximator can do.
 - **The two searches' terminals are not interchangeable, and they diverge
   exactly where a reader is most likely to be watching.** `DenominatorSweep`
   stops at the least-**denominator** enclosed rational, `HeightSweep` at the
-  least-**height** one, and the two differ precisely when the enclosure holds two
-  or more integers — measured over 5387 enclosures above one, that is the *only*
+  least-**height** one, and the two differ only when the enclosure holds two or
+  more integers — measured over 5387 enclosures above one, that is the *only*
   disagreement. `[1, 2]` yields `2/1` from the sweep and `1/1` from height order;
-  `12 ± 1` yields `12` and `11`. A wide enclosure is what an early iteration
+  `12 ± 1` yields `12` and `11`. Two integers permit the divergence and do not
+  force it: `6/5 ± 9/10`, which is `[3/10, 21/10]`, holds 1 and 2, and both
+  searches end at `1/1`, because the integer nearest `6/5` is also the one of
+  least height. A wide enclosure is what an early iteration
   looks like, so a caller that treats the two as substitutes is wrong at the
   start of a run and right later, which is the worst order to be wrong in.
   `HeightSweep`'s version of the claim is unconditional: above one, an enclosure

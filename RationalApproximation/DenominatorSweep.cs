@@ -67,9 +67,7 @@ public sealed class DenominatorSweep : IRationalApproximator
     /// correctness device. What it buys is a legible refusal in place of an astronomically long
     /// but finite run, and how long a run is worth waiting for is the caller's question rather
     /// than this type's, so it is not answered here. The gap is wide: against a target of
-    /// <c>7919/307</c> the sweep terminates at denominator 39 while <c>d</c> is 307, and a real
-    /// provider's enclosure carries a value whose denominator has as many digits as its precision,
-    /// putting the provable bound far beyond anywhere an answer is found.
+    /// <c>7919/307</c> the sweep terminates at denominator 39 while <c>d</c> is 307.
     /// </para>
     /// <para>
     /// This rationale previously read that there was no bound to impose, and argued from that

@@ -12,8 +12,9 @@ namespace HalHeinrich.Numerics.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The numbers here are derived and stated rather than quoted. The spec's worked example of this
-/// point does not reproduce and is filed as halheinrich/Math#21, so nothing below is pinned to it.
+/// The numbers here are derived and stated rather than quoted. This file is what pins the spec's
+/// worked example of this point, as corrected under halheinrich/Math#21: <c>4096/243</c> and
+/// <c>260096/12825 +/- 9668096/577125</c> below are its figures, asserted exactly.
 /// </para>
 /// <para>
 /// Two truncations, chosen because they are short enough to check by hand:

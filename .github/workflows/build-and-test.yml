@@ -39,9 +39,9 @@
 # BigRationalLibrary is taken at main, not at the SHA the umbrella pins. This
 # workflow cannot read that pin without the private umbrella. So this gate
 # tests integration against BigRational's tip, which can go red for a reason
-# outside this repo. That is deliberate: BigRational is breaking its surface at
-# 0.1.0-preview1, and a consumer-side gate that notices immediately is worth
-# more than one that agrees with a stale pin. When a red build traces to
+# outside this repo. That is deliberate: BigRational is a pre-release still
+# breaking its surface, and a consumer-side gate that notices immediately is
+# worth more than one that agrees with a stale pin. When a red build traces to
 # BigRational rather than to this commit, the fix is upstream.
 #
 # TEMPLATE NOTES FOR STEPS 5, 6 AND 8
