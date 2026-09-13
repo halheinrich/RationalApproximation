@@ -189,7 +189,8 @@ could be imposed**, since `d` is one, but because such a bound is a *budget* and
 never a correctness device. It buys a legible refusal in place of an
 astronomically long but finite run, and how long a run is worth waiting for is
 the caller's question rather than the type's. The gap is wide: against a target
-of `7919/307` the sweep stops at denominator 39 while `d` is 307. This
+of `7919/307` at a radius of `1/10000` the sweep stops at denominator 39 while
+`d` is 307. This
 rationale replaced one saying no bound *existed* and arguing
 from that against ever imposing one — both halves wrong, and the second argued
 against the very cap the test suite already runs under.
