@@ -510,15 +510,42 @@ inside `BoundedSearch`'s budget, which a linear walk could not meet in `10^30`
 steps, so load cannot make it flaky; a laziness test takes the first survivors
 of `6 ± 1/10` at the same bound, of which there are on the order of `10^59`.
 
-**Most of its defects hang rather than answer wrongly**, so every call the tests
-make — `Bracket` included — runs under `BoundedSearch`. Measured by mutation
-2026-09-18, on the 260-test suite: each `k` in the descent one short, the right
-end's `k` one long, `lo` made exclusive, and the recurrence's floor made a
-ceiling each stop the walk making progress, and each was caught by the budget
-and by no assertion, the latch then failing the rest by design. The left end's
-`k` one long also fails three tests on their own assertions. `hi` made exclusive
-reddens nineteen, and intersecting only the narrowest enclosure reddens seven,
-among them the three-enclosure test.
+**Most of its defects hang rather than answer wrongly, so its invariants are
+checked always.** After every batch the descent checks that it moved by at least
+one, that it alternated sides, that `a/b < lo <= c/d`, that both denominators
+lie in `[1, Q]`, and that `bc − ad = 1`. After every step the walk checks that
+the new term is larger, of denominator in `[1, Q]`, and consecutive with the
+last by `bc − ad = 1` and `b + d > Q`. Each is computed from the definition,
+never by re-deriving `k`, and a failure throws `UnreachableException`: it is a
+defect in the walk, never the caller's fault. The checks make termination
+provable, and they are why a defect reddens in milliseconds instead of waiting
+out `BoundedSearch`'s ten seconds. Every call the tests make — `Bracket`
+included — still runs under that budget, as the backstop.
+
+Measured by mutation 2026-09-18, on the 260-test suite, with none of the red
+tests an overrun or a latch failure:
+
+| Mutant | Red | First check to fire |
+| --- | --- | --- |
+| descent, left `k` + 1 | 27 | `a/b < lo <= c/d`, denominators in `[1, Q]` |
+| descent, left `k` − 1 | 27 | moves by at least one |
+| descent, right `k` + 1 | 23 | `a/b < lo <= c/d`, denominators in `[1, Q]` |
+| descent, right `k` − 1 | 23 | moves by at least one |
+| descent unbatched on the left, `k` capped at 1 | 27 | batches alternate |
+| `lo` exclusive, mediant `<` made `<=` | 20 | moves by at least one |
+| recurrence floor made ceiling | 23 | next denominator in `[1, Q]` |
+| `hi` exclusive, `<=` made `<` | 19 | none; the cross-checks catch it |
+| intersect only the narrowest enclosure | 7 | none; the cross-checks catch it |
+
+Before the checks, six of the original eight mutants reached the budget, and five
+of them nothing else. With only the move, alternation and bracket checks, the
+right end's `k` + 1 also gives wrong answers with no check firing: 513 of 5,000
+cases in an exact-arithmetic port (Q up to 1000), and in all 513 the bracket's
+right denominator exceeds `Q`. The descent's `[1, Q]` check is what stops that
+at the batch. No mutant reaches the walk's
+increasing, `bc − ad = 1` or `b + d > Q` checks, or the descent's
+`bc − ad = 1`, before another check fires; they are there for a defect that
+keeps the others.
 
 ### `AffineConstant` — the one combinator
 
@@ -915,6 +942,16 @@ search yielded nothing, which only a defective approximator can do.
   which shares none of its steps; `BruteForce.SurvivorsByIntersection` shares
   the intersection, so it cannot be the only check. A disagreement is fixed in
   `FareyWalk`, never by moving the reference.
+- **Do not strip `FareyWalk`'s invariant checks as overhead, or demote them to
+  debug assertions.** Most defects in that walk make it spin rather than answer
+  wrongly, and a spin reports nothing: in a test it waits out a ten-second
+  budget, and in the app this walk exists for (`halheinrich/Math#80`) it is a
+  frozen tab. The checks turn every such defect into an `UnreachableException`
+  at the batch or step that broke, at a constant cost per batch or step.
+  `AGENTS.md` § Testing discipline asks for a guard that reddens in
+  milliseconds wherever the symptom is non-termination, and in a released build
+  these are that guard. The `Q = 10^30` cost guard stays as the backstop for a
+  defect that keeps every invariant and is merely slow.
 - **The two searches' terminals are not interchangeable, and they diverge
   exactly where a reader is most likely to be watching.** `DenominatorSweep`
   stops at the least-**denominator** enclosed rational, `HeightSweep` at the

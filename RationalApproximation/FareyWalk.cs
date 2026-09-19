@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Numerics;
 
 namespace HalHeinrich.Numerics;
@@ -52,6 +54,21 @@ namespace HalHeinrich.Numerics;
 /// intersection is closed at both ends.
 /// </para>
 /// <para>
+/// <b>Its invariants are checked on every batch and step, always, not only in a debug build.</b>
+/// Most defects in this walk make it spin rather than answer wrongly: a batch that moves by zero,
+/// or a run of batches cut short, loses progress without losing correctness, and a spin reports
+/// nothing - in a test it waits out a time budget, and in an app it is a frozen caller. So the
+/// descent checks after every batch that it moved, that it alternated sides, that the value stays
+/// bracketed, that both denominators lie in <c>[1, Q]</c>, and that the pair stays unimodular; the
+/// walk checks after every step that the new term is larger, of denominator in <c>[1, Q]</c>, and
+/// consecutive with the last by <c>bc - ad = 1</c> and <c>b + d &gt; Q</c>. Each is computed from
+/// the definition and never by re-deriving <c>k</c>, so a check cannot share a defect with the
+/// arithmetic it watches. Together they make termination provable - the descent's <c>b + d</c>
+/// strictly grows to the bound, the walk's terms strictly grow past the upper end - and a failure
+/// throws <see cref="UnreachableException"/>, since it is a defect here and never a fault in the
+/// arguments. The cost is a constant per batch or step.
+/// </para>
+/// <para>
 /// <b>Never its own oracle.</b> It shares no enumeration with <see cref="DenominatorWalk"/>, the
 /// reference, and every result it gives is checked against that walk. A defect found in this type
 /// is fixed here and never by adjusting the reference to agree.
@@ -77,10 +94,20 @@ public sealed class FareyWalk : SurvivorSearch
         // end, inclusive, is a survivor and no other rational is.
         while (new BigRational(c, d) <= upper)
         {
-            yield return new BigRational(c, d);
+            BigRational yielded = new(c, d);
+            yield return yielded;
 
             BigInteger k = Floor(new BigRational(denominatorBound + b, d));
             (a, b, c, d) = (c, d, (k * c) - a, (k * d) - b);
+
+            // Checked from the definition of consecutive terms of order Q, never by re-deriving k.
+            // Strictly increasing terms of bounded denominator are finitely many below the upper
+            // end, so these are what make the loop provably end; b + d > Q is what says no term
+            // was skipped, so no survivor was.
+            Require(d.Sign > 0 && d <= denominatorBound, "the next term's denominator lies in [1, Q]", a, b, c, d);
+            Require(new BigRational(c, d) > yielded, "each term exceeds the one before it", a, b, c, d);
+            Require((b * c) - (a * d) == BigInteger.One, "consecutive terms satisfy bc - ad = 1", a, b, c, d);
+            Require(b + d > denominatorBound, "consecutive terms satisfy b + d > Q", a, b, c, d);
         }
     }
 
@@ -96,6 +123,7 @@ public sealed class FareyWalk : SurvivorSearch
     /// <c>b + d &gt; Q</c> - which together say they are consecutive terms of order <c>Q</c>.
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="denominatorBound"/> is below one.</exception>
+    /// <exception cref="UnreachableException">The descent broke one of its own invariants - a defect in this type.</exception>
     /// <remarks>
     /// <para>
     /// <c>internal</c> for the tests, which check the certificate above from the definition and
@@ -124,11 +152,19 @@ public sealed class FareyWalk : SurvivorSearch
         BigInteger b = BigInteger.One;
         BigInteger c = n;
         BigInteger d = BigInteger.One;
+        RequireBracket(lower, denominatorBound, a, b, c, d);
+
+        // Which end the previous batch moved: -1 left, +1 right, 0 before the first.
+        int previousSide = 0;
 
         while (b + d <= denominatorBound)
         {
+            int side;
+
             if (new BigRational(a + c, b + d) < lower)
             {
+                side = -1;
+
                 // Move the left end to (a + kc)/(b + kd) for the largest k keeping it below the
                 // value and its denominator within the bound. Below the value means
                 // k(c - lower*d) < lower*b - a; the mediant being below makes k = 1 valid. When
@@ -142,11 +178,14 @@ public sealed class FareyWalk : SurvivorSearch
                     k = BigInteger.Min(k, Ceiling(((lower * b) - a) / rightGap) - BigInteger.One);
                 }
 
+                Require(k.Sign > 0, "every batch of the descent moves by at least one", a, b, c, d);
                 a += k * c;
                 b += k * d;
             }
             else
             {
+                side = +1;
+
                 // Move the right end to (ka + c)/(kb + d) for the largest k keeping it at or above
                 // the value and its denominator within the bound: k(lower*b - a) <= c - lower*d,
                 // where lower*b - a is positive because the left end is strictly below.
@@ -154,12 +193,66 @@ public sealed class FareyWalk : SurvivorSearch
                     Floor(new BigRational(denominatorBound - d, b)),
                     Floor((c - (lower * d)) / ((lower * b) - a)));
 
+                Require(k.Sign > 0, "every batch of the descent moves by at least one", a, b, c, d);
                 c += k * a;
                 d += k * b;
             }
+
+            // A maximal batch leaves the next mediant on the other side of the value, so batches
+            // alternate; one that did not would be a batch cut short, and a run of them is how a
+            // logarithmic descent turns linear.
+            Require(side != previousSide, "batches of the descent alternate sides", a, b, c, d);
+            previousSide = side;
+            RequireBracket(lower, denominatorBound, a, b, c, d);
         }
 
         return (a, b, c, d);
+    }
+
+    /// <summary>
+    /// The descent's invariant after every batch, from the definition: the value is bracketed,
+    /// <c>a/b &lt; lower &lt;= c/d</c>; both denominators lie in <c>[1, Q]</c>; and the pair is
+    /// unimodular, <c>bc - ad = 1</c>.
+    /// </summary>
+    private static void RequireBracket(
+        BigRational lower,
+        BigInteger denominatorBound,
+        BigInteger a,
+        BigInteger b,
+        BigInteger c,
+        BigInteger d)
+    {
+        Require(
+            b.Sign > 0 && d.Sign > 0 && b <= denominatorBound && d <= denominatorBound,
+            "the descent's denominators lie in [1, Q]",
+            a, b, c, d);
+        Require(
+            new BigRational(a, b) < lower && lower <= new BigRational(c, d),
+            "the descent keeps a/b < lower <= c/d",
+            a, b, c, d);
+        Require((b * c) - (a * d) == BigInteger.One, "the descent keeps bc - ad = 1", a, b, c, d);
+    }
+
+    /// <summary>
+    /// Throws when one of this type's own invariants fails. A failure is a defect in
+    /// <see cref="FareyWalk"/>, never a fault in the caller's arguments, which
+    /// <see cref="SurvivorSearch.Survivors"/> has already validated.
+    /// </summary>
+    /// <remarks>
+    /// Always on, not a debug assertion: most defects in this walk make it spin rather than answer
+    /// wrongly, and a spin in a released build is a frozen caller with nothing to report. The
+    /// message is built only on failure, so a check that holds costs its comparison and nothing
+    /// more.
+    /// </remarks>
+    /// <exception cref="UnreachableException"><paramref name="holds"/> is <see langword="false"/>.</exception>
+    private static void Require(bool holds, string invariant, BigInteger a, BigInteger b, BigInteger c, BigInteger d)
+    {
+        if (!holds)
+        {
+            throw new UnreachableException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"FareyWalk broke its own invariant \"{invariant}\" at a/b = {a}/{b}, c/d = {c}/{d}. This is a defect in FareyWalk, not in the arguments."));
+        }
     }
 
     /// <summary>
