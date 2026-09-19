@@ -41,9 +41,13 @@ framework and namespace conventions are umbrella-wide and live in
   concrete constants (see § Architecture).
 - **`RationalApproximation.Tests`** — xUnit. Also holds the reference oracles
   and the harness the library is checked against, which are part of the design
-  rather than scaffolding: `BruteForce` (an independent implementation of what
-  `DenominatorSweep` claims), `BoundedSearch` (the hang guard), `Sampling` and
-  `TestConstants`. It sees `internal` members by `InternalsVisibleTo`.
+  rather than scaffolding: `BruteForce`, `BoundedSearch` (the hang guard),
+  `Sampling` and `TestConstants`. `BruteForce` holds two oracles. Its height and
+  denominator enumerations are an independent implementation of what
+  `DenominatorSweep` claims. `SurvivorsByIntersection` arbitrates the survivor
+  walks: it is independent of `DenominatorWalk` in both its steps, and of
+  `FareyWalk` in its enumeration only, since both intersect first. The project
+  sees `internal` members by `InternalsVisibleTo`.
 
 ## Architecture
 
@@ -1086,7 +1090,8 @@ search yielded nothing, which only a defective approximator can do.
   because replacing the empty-enclosure throw with an empty result orphaned its
   `NoEnclosuresMessage`; `CS0162` on the same type, because disabling the
   reduced-pair skip through a constant-false condition left its `continue`
-  unreachable; and `CA1823` a fourth time, on `SurvivorSearch` again, because
+  unreachable (that skip has since moved, unchanged, into `DenominatorWalk`);
+  and `CA1823` a fourth time, on `SurvivorSearch` again, because
   removing `ExclusiveIsolationBound`'s unreachable-target refusal orphaned its
   `UnreachableIsolationMessage`. **"Did not compile" is therefore a legitimate
   mutation-run outcome and not a failed experiment** — it is the same finding a
