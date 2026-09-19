@@ -5,14 +5,26 @@ using static HalHeinrich.Numerics.Tests.Sampling;
 namespace HalHeinrich.Numerics.Tests;
 
 /// <summary>
-/// <see cref="SurvivorSearch"/>, the refutation search. Its answers are checked against fixtures
-/// computed by hand and against <see cref="BruteForce.SurvivorsByIntersection"/>, which reaches
-/// them by intersecting the intervals instead of seeding a walk and testing each candidate.
+/// The contract every <see cref="SurvivorSearch"/> keeps, run once per implementation by the
+/// classes deriving from this one. Answers are checked against fixtures computed by hand and
+/// against <see cref="BruteForce.SurvivorsByIntersection"/>.
 /// </summary>
-public class SurvivorSearchTests
+/// <remarks>
+/// <para>
+/// <b>Nothing here asserts an order</b>, because the base promises none: every comparison is of
+/// the set, sorted by value first. Each implementation's order is tested in its own class.
+/// </para>
+/// <para>
+/// The rational-target rules are statics on the base, but their tests belong here: each checks a
+/// rule against what <see cref="SurvivorSearch.Survivors"/> returns, and a rule about the survivor
+/// set has to hold of every walk that produces one. The few that never call a walk are in
+/// <see cref="SurvivorSearchRuleTests"/>, so they do not run once per implementation for nothing.
+/// </para>
+/// </remarks>
+public abstract class SurvivorSearchContractTests
 {
-    /// <summary>The walk under test, and the only implementation there is.</summary>
-    private static readonly DenominatorWalk Walk = new();
+    /// <summary>The walk under test.</summary>
+    protected abstract SurvivorSearch Search { get; }
 
     /// <summary>
     /// Enclosure sets spanning the shapes that change the answer, each with the denominator bound
@@ -20,7 +32,7 @@ public class SurvivorSearchTests
     /// and negative and straddling zero, disjoint, and one whose endpoints are integers. The
     /// bounds are chosen to keep every survivor set small enough to compare element by element.
     /// </summary>
-    private static (Approximation[] Enclosures, int Bound)[] Families() =>
+    protected static (Approximation[] Enclosures, int Bound)[] Families() =>
     [
         ([Enclosure(6, 1, 1, 10)], 10),
         ([Enclosure(6, 1, 1, 10)], 60),
@@ -38,14 +50,21 @@ public class SurvivorSearchTests
     ];
 
     /// <summary>Builds an enclosure from two exact rationals, keeping the fixtures free of decimals.</summary>
-    private static Approximation Enclosure(int value, int valueDenominator, int error, int errorDenominator) =>
+    protected static Approximation Enclosure(int value, int valueDenominator, int error, int errorDenominator) =>
         Approximation.Create(Ratio(value, valueDenominator), Ratio(error, errorDenominator));
 
-    /// <summary>Runs a search to completion under the shared budget. Reasoning in <see cref="BoundedSearch"/>.</summary>
-    private static List<BigRational> Run(IEnumerable<Approximation> enclosures, BigInteger denominatorBound) =>
+    /// <summary>
+    /// Runs a search to completion under the shared budget, in the order the walk yields.
+    /// Reasoning in <see cref="BoundedSearch"/>.
+    /// </summary>
+    protected IReadOnlyList<BigRational> Run(IEnumerable<Approximation> enclosures, BigInteger denominatorBound) =>
         BoundedSearch.CompleteWithin(
-            () => new List<BigRational>(Walk.Survivors(enclosures, denominatorBound)),
+            () => new List<BigRational>(Search.Survivors(enclosures, denominatorBound)),
             Inv($"A survivor search to denominator {denominatorBound}"));
+
+    /// <summary>A search's survivors in ascending order, for comparing as a set.</summary>
+    protected IReadOnlyList<BigRational> SortedRun(IEnumerable<Approximation> enclosures, BigInteger denominatorBound) =>
+        [.. Run(enclosures, denominatorBound).Order()];
 
     // ---------- the four fixtures, computed by hand ----------
 
@@ -53,11 +72,11 @@ public class SurvivorSearchTests
     public void Survivors_ForOneEnclosure_AreEveryRationalOfTheBoundItAdmits()
     {
         // 6 +/- 1/10 is [59/10, 61/10]. At denominator 1 that holds 6; at 10 it holds 59, 60 and
-        // 61 over 10, of which 60/10 is 6 again and so is not proposed a second time. Denominators
+        // 61 over 10, of which 60/10 is 6 again and so is not reported a second time. Denominators
         // 2 through 9 each hold only the corresponding multiple of 6, which is 6 again.
         Assert.Equal(
-            new[] { Ratio(6, 1), Ratio(59, 10), Ratio(61, 10) },
-            Run([Enclosure(6, 1, 1, 10)], 10));
+            new[] { Ratio(59, 10), Ratio(6, 1), Ratio(61, 10) },
+            SortedRun([Enclosure(6, 1, 1, 10)], 10));
     }
 
     [Fact]
@@ -66,7 +85,7 @@ public class SurvivorSearchTests
         // The same enclosure. What removes 59/10 and 61/10 here is the bound and not a refutation:
         // the enclosure still admits both, and a caller reading this result as evidence against
         // them would be reading a budget as a proof.
-        Assert.Equal(new[] { Ratio(6, 1) }, Run([Enclosure(6, 1, 1, 10)], 3));
+        Assert.Equal(new[] { Ratio(6, 1) }, SortedRun([Enclosure(6, 1, 1, 10)], 3));
     }
 
     [Fact]
@@ -82,12 +101,12 @@ public class SurvivorSearchTests
         Assert.Equal(
             new[]
             {
-                Ratio(6, 1), Ratio(31, 5), Ratio(37, 6), Ratio(43, 7),
-                Ratio(49, 8), Ratio(55, 9), Ratio(61, 10),
+                Ratio(6, 1), Ratio(61, 10), Ratio(55, 9), Ratio(49, 8),
+                Ratio(43, 7), Ratio(37, 6), Ratio(31, 5),
             },
-            Run([second], 10));
+            SortedRun([second], 10));
 
-        Assert.Equal(new[] { Ratio(6, 1), Ratio(61, 10) }, Run([first, second], 10));
+        Assert.Equal(new[] { Ratio(6, 1), Ratio(61, 10) }, SortedRun([first, second], 10));
     }
 
     [Fact]
@@ -97,20 +116,22 @@ public class SurvivorSearchTests
         // rationals of denominator at or below 20.
         Assert.Equal(
             new[] { Ratio(6, 1) },
-            Run([Enclosure(6, 1, 1, 10), Enclosure(599, 100, 1, 100)], 20));
+            SortedRun([Enclosure(6, 1, 1, 10), Enclosure(599, 100, 1, 100)], 20));
     }
 
     [Fact]
     public void Survivors_CanBeRefutedByAnEnclosureThatIsNeitherTheSeedNorTheLast()
     {
         // Fixture C above cannot see this and neither can any pair, which a mutation run found the
-        // expensive way: the walk is seeded from the narrowest enclosure, so with two of them
+        // expensive way: DenominatorWalk seeds from the narrowest enclosure, so with two of them
         // "test the seed and the last" already covers both and an implementation ignoring the
-        // middle passes. Three are needed, with the sole refuter in the middle.
+        // middle passes. Three are needed, with the sole refuter in the middle. FareyWalk meets
+        // the same hazard another way: it intersects, and an intersection over a subset - the
+        // narrowest alone, or the first and last - is exactly that mutant.
         //
-        // The narrowest here is the last, at half-width 1/10, so it seeds the walk. 61/10 +/- 3/20
-        // is [119/20, 25/4], which is the only one of the three excluding 59/10 - the first is
-        // 6 +/- 1 and contains everything in sight.
+        // The narrowest here is the last, at half-width 1/10. 61/10 +/- 3/20 is [119/20, 25/4],
+        // which is the only one of the three excluding 59/10 - the first is 6 +/- 1 and contains
+        // everything in sight.
         Approximation[] enclosures =
         [
             Enclosure(6, 1, 1, 1),
@@ -118,13 +139,13 @@ public class SurvivorSearchTests
             Enclosure(6, 1, 1, 10),
         ];
 
-        Assert.Equal(new[] { Ratio(6, 1), Ratio(61, 10) }, Run(enclosures, 10));
+        Assert.Equal(new[] { Ratio(6, 1), Ratio(61, 10) }, SortedRun(enclosures, 10));
 
         // Without the middle enclosure, 59/10 stands. That is what makes the assertion above a
         // statement about the middle one rather than about the pair around it.
         Assert.Equal(
-            new[] { Ratio(6, 1), Ratio(59, 10), Ratio(61, 10) },
-            Run([enclosures[0], enclosures[2]], 10));
+            new[] { Ratio(59, 10), Ratio(6, 1), Ratio(61, 10) },
+            SortedRun([enclosures[0], enclosures[2]], 10));
     }
 
     // ---------- the property the whole formulation rests on ----------
@@ -145,12 +166,12 @@ public class SurvivorSearchTests
             Enclosure(6, 1, 1, 1000),
         ];
 
-        List<BigRational> previous = Run(chain[..1], Bound);
+        IReadOnlyList<BigRational> previous = Run(chain[..1], Bound);
         var sizes = new List<int> { previous.Count };
 
         for (int length = 2; length <= chain.Length; length++)
         {
-            List<BigRational> current = Run(chain[..length], Bound);
+            IReadOnlyList<BigRational> current = Run(chain[..length], Bound);
 
             Assert.All(
                 current,
@@ -175,16 +196,15 @@ public class SurvivorSearchTests
     {
         // Two implementations agreeing is the strongest correctness evidence available here, and
         // it is only evidence where they are actually different code. The oracle never asks which
-        // enclosure is narrowest and never tests a candidate against one, so a defect in the seed
-        // or in the per-enclosure test cannot be mirrored in it.
+        // enclosure is narrowest and never tests a candidate against one, so a defect in
+        // DenominatorWalk's seed or in its per-enclosure test cannot be mirrored in it. It does
+        // share FareyWalk's first step, the intersection, and not its enumeration - which is why
+        // FareyWalkTests also holds that walk to DenominatorWalk, which shares neither.
         int compared = 0;
 
         foreach ((Approximation[] enclosures, int bound) in Families())
         {
-            List<BigRational> sorted = [.. Run(enclosures, bound)];
-            sorted.Sort();
-
-            Assert.Equal(BruteForce.SurvivorsByIntersection(enclosures, bound), sorted);
+            Assert.Equal(BruteForce.SurvivorsByIntersection(enclosures, bound), SortedRun(enclosures, bound));
             compared++;
         }
 
@@ -198,40 +218,9 @@ public class SurvivorSearchTests
         // makes that comparison a real check rather than one a repeated 6 would pass.
         foreach ((Approximation[] enclosures, int bound) in Families())
         {
-            List<BigRational> found = Run(enclosures, bound);
+            IReadOnlyList<BigRational> found = Run(enclosures, bound);
             Assert.Equal(found.Count, found.Distinct().Count());
         }
-    }
-
-    [Fact]
-    public void Survivors_AreYieldedInNondecreasingDenominatorOrder()
-    {
-        int ordered = 0;
-
-        foreach ((Approximation[] enclosures, int bound) in Families())
-        {
-            List<BigRational> found = Run(enclosures, bound);
-
-            for (int i = 1; i < found.Count; i++)
-            {
-                BigInteger previous = found[i - 1].Denominator;
-                BigInteger current = found[i].Denominator;
-
-                Assert.True(
-                    previous <= current,
-                    Inv($"{found[i]} follows {found[i - 1]}, so the denominators fell."));
-
-                // Within one denominator the numerators ascend, so the values do.
-                Assert.True(
-                    previous < current || found[i - 1] < found[i],
-                    Inv($"{found[i]} follows {found[i - 1]} at one denominator without increasing."));
-            }
-
-            ordered += found.Count;
-        }
-
-        // Fixtures that were all empty or all single would order trivially and prove nothing.
-        Assert.True(ordered > 100, Inv($"Only {ordered} survivors were ordered."));
     }
 
     [Fact]
@@ -254,16 +243,17 @@ public class SurvivorSearchTests
     }
 
     [Fact]
-    public void Survivors_DoNotDependOnWhichEnclosureSeedsTheWalk()
+    public void Survivors_DoNotDependOnTheOrderOfTheEnclosures()
     {
-        // The narrowest enclosure is chosen to make the walk cheap, and that is a cost decision
-        // rather than a correctness one. Reversing the order changes which enclosure a tie in
-        // width resolves to, and must change nothing else.
+        // The set is a property of the enclosures, not of the sequence they arrive in. For
+        // DenominatorWalk, reversing them changes which enclosure a tie in width seeds the walk
+        // from - a cost decision, not a correctness one; for FareyWalk, which extremes the
+        // intersection meets first. Neither may change the answer.
         foreach ((Approximation[] enclosures, int bound) in Families())
         {
             Approximation[] reversed = [.. enclosures.Reverse()];
 
-            Assert.Equal(Run(enclosures, bound), Run(reversed, bound));
+            Assert.Equal(SortedRun(enclosures, bound), SortedRun(reversed, bound));
         }
     }
 
@@ -279,21 +269,6 @@ public class SurvivorSearchTests
     }
 
     [Fact]
-    public void Survivors_CanBeTakenAFewAtATime_WithoutWalkingToTheBound()
-    {
-        // Laziness, against a bound no eager walk could reach. The first three survivors of
-        // 6 +/- 1/10 are settled by denominator 10, so this returns at once if candidates are
-        // walked one at a time, and never if they are collected before being returned.
-        BigInteger bound = BigInteger.Pow(10, 30);
-
-        List<BigRational> first = BoundedSearch.CompleteWithin(
-            () => new List<BigRational>(Walk.Survivors([Enclosure(6, 1, 1, 10)], bound).Take(3)),
-            "A truncated survivor search");
-
-        Assert.Equal(new[] { Ratio(6, 1), Ratio(59, 10), Ratio(61, 10) }, first);
-    }
-
-    [Fact]
     public void Survivors_ReadTheEnclosureSequenceExactlyOnce()
     {
         // The enclosures are copied at the call, so a caller may hand over a lazy sequence and a
@@ -301,7 +276,7 @@ public class SurvivorSearchTests
         // would be both a cost and a correctness hazard, and neither shows up in the values.
         var counter = new CountingEnclosures([Enclosure(6, 1, 1, 10)]);
 
-        Assert.Equal(new[] { Ratio(6, 1), Ratio(59, 10), Ratio(61, 10) }, Run(counter, 10));
+        Assert.Equal(new[] { Ratio(59, 10), Ratio(6, 1), Ratio(61, 10) }, SortedRun(counter, 10));
         Assert.Equal(1, counter.Enumerations);
     }
 
@@ -314,7 +289,7 @@ public class SurvivorSearchTests
         // them, the numerator being unbounded. An empty result would say the opposite of the
         // truth, and it is the direction AGENTS.md's report-the-bound rule forbids.
         ArgumentException thrown = Assert.Throws<ArgumentException>(
-            () => Walk.Survivors([], 10));
+            () => Search.Survivors([], 10));
 
         Assert.Equal("enclosures", thrown.ParamName);
     }
@@ -325,14 +300,14 @@ public class SurvivorSearchTests
         // Not merely that it throws, but that it throws here. An iterator method defers its whole
         // body to the first MoveNext, which would surface an argument fault at some later foreach
         // with nothing left to say which call caused it.
-        Assert.Throws<ArgumentNullException>(() => Walk.Survivors(null!, 10));
+        Assert.Throws<ArgumentNullException>(() => Search.Survivors(null!, 10));
     }
 
     [Fact]
     public void Survivors_WithANegativeBound_ThrowAtTheCall()
     {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => Walk.Survivors([Enclosure(6, 1, 1, 10)], -1));
+            () => Search.Survivors([Enclosure(6, 1, 1, 10)], -1));
 
         Assert.Equal("denominatorBound", thrown.ParamName);
     }
@@ -381,25 +356,27 @@ public class SurvivorSearchTests
     public void Survivors_OfANegativeEnclosure_MirrorThePositiveTwin()
     {
         // The sign is carried by the numerator, so a negative target's answer is the positive
-        // one's negated - in the reverse order within each denominator, since the values ascend.
+        // one's negated.
         Assert.Equal(
-            new[] { Ratio(-6, 1), Ratio(-61, 10), Ratio(-59, 10) },
-            Run([Enclosure(-6, 1, 1, 10)], 10));
+            new[] { Ratio(-61, 10), Ratio(-6, 1), Ratio(-59, 10) },
+            SortedRun([Enclosure(-6, 1, 1, 10)], 10));
+
+        Assert.Equal(
+            [.. SortedRun([Enclosure(6, 1, 1, 10)], 10).Select(survivor => -survivor).Reverse()],
+            SortedRun([Enclosure(-6, 1, 1, 10)], 10));
     }
 
     [Fact]
     public void Survivors_OfAWideEnclosure_IncludeEveryIntegerItStraddles()
     {
-        // 1 +/- 4 is [-3, 5]. Every integer in it survives, and the first yielded is -3/1 at
-        // height 3 rather than the 0/1 of height 1 it also holds - the promised order being a
-        // denominator order and not a height order.
+        // 1 +/- 4 is [-3, 5], zero included, and at a bound of 1 every integer in it survives.
         Assert.Equal(
             new[]
             {
                 Ratio(-3, 1), Ratio(-2, 1), Ratio(-1, 1), Ratio(0, 1), Ratio(1, 1),
                 Ratio(2, 1), Ratio(3, 1), Ratio(4, 1), Ratio(5, 1),
             },
-            Run([Enclosure(1, 1, 4, 1)], 1));
+            SortedRun([Enclosure(1, 1, 4, 1)], 1));
     }
 
     // ---------- reachability and isolation: SPEC-rational-ratio.md § 2's two rules ----------
@@ -432,10 +409,10 @@ public class SurvivorSearchTests
     private static BigRational[] IntegerTargets() => [Ratio(6, 1), Ratio(90, 1), Ratio(-3, 1), BigRational.Zero];
 
     /// <summary>Just inside an exclusive bound - close enough that a rival at the bound is in reach of a looser rule.</summary>
-    private static BigRational JustBelow(BigRational bound) => bound * Ratio(999, 1000);
+    internal static BigRational JustBelow(BigRational bound) => bound * Ratio(999, 1000);
 
     /// <summary>Just outside an exclusive bound.</summary>
-    private static BigRational JustAbove(BigRational bound) => bound * Ratio(1001, 1000);
+    internal static BigRational JustAbove(BigRational bound) => bound * Ratio(1001, 1000);
 
     /// <summary>
     /// Enclosures of one half-width that all contain the target: with it at either end, at the
@@ -496,9 +473,9 @@ public class SurvivorSearchTests
     }
 
     /// <summary>Runs one enclosure's search and requires the target, and nothing else, to survive it.</summary>
-    private static void AssertAlone(BigRational target, BigInteger bound, Approximation enclosure)
+    private void AssertAlone(BigRational target, BigInteger bound, Approximation enclosure)
     {
-        List<BigRational> survivors = Run([enclosure], bound);
+        IReadOnlyList<BigRational> survivors = Run([enclosure], bound);
 
         Assert.True(
             survivors.Count == 1 && survivors[0] == target,
@@ -506,13 +483,8 @@ public class SurvivorSearchTests
             Inv($"{survivors.Count} survivors, starting {string.Join(", ", survivors.Take(3))}."));
     }
 
-    /// <summary>A search's survivors in ascending order, for comparing as a set.</summary>
-    private static List<BigRational> SortedRun(Approximation enclosure, BigInteger bound)
-    {
-        List<BigRational> sorted = Run([enclosure], bound);
-        sorted.Sort();
-        return sorted;
-    }
+    /// <summary>One enclosure's survivors in ascending order, for comparing as a set.</summary>
+    private IReadOnlyList<BigRational> SortedRun(Approximation enclosure, BigInteger bound) => SortedRun([enclosure], bound);
 
     [Fact]
     public void IsReachable_TurnsOnTheTargetsOwnDenominator_AsTheSearchDoes()
@@ -704,7 +676,7 @@ public class SurvivorSearchTests
                     {
                         if (b.IsOne)
                         {
-                            List<BigRational> crowded = Run([Approximation.Create(target + halfWidth, halfWidth)], bound);
+                            IReadOnlyList<BigRational> crowded = Run([Approximation.Create(target + halfWidth, halfWidth)], bound);
                             Assert.True(
                                 crowded.Count > 1,
                                 Inv($"IsIsolated said no to {target} at Q = {bound}, +/- {halfWidth}, and nothing else survived."));
@@ -719,23 +691,6 @@ public class SurvivorSearchTests
         // A grid that never said yes would pass the first branch vacuously, and one that never
         // said no would never exercise the strictness.
         Assert.True(yes > 0 && no > 0, Inv($"{yes} yes and {no} no: one answer never occurred."));
-    }
-
-    [Fact]
-    public void IsIsolated_IsStrictlyBelowTheExclusiveBound()
-    {
-        BigRational[] targets = [Ratio(6, 1), Ratio(7, 3), new(638_512_875, 691)];
-
-        foreach (BigRational target in targets)
-        {
-            BigInteger bound = target.Denominator + 3;
-            BigRational exclusiveBound = SurvivorSearch.ExclusiveIsolationBound(target, bound);
-
-            Assert.True(SurvivorSearch.IsIsolated(target, bound, BigRational.Zero));
-            Assert.True(SurvivorSearch.IsIsolated(target, bound, JustBelow(exclusiveBound)));
-            Assert.False(SurvivorSearch.IsIsolated(target, bound, exclusiveBound));
-            Assert.False(SurvivorSearch.IsIsolated(target, bound, JustAbove(exclusiveBound)));
-        }
     }
 
     [Fact]
@@ -775,7 +730,7 @@ public class SurvivorSearchTests
 
         ArgumentOutOfRangeException[] refusals =
         [
-            Assert.Throws<ArgumentOutOfRangeException>(() => Walk.Survivors([Enclosure(6, 1, 1, 10)], -1)),
+            Assert.Throws<ArgumentOutOfRangeException>(() => Search.Survivors([Enclosure(6, 1, 1, 10)], -1)),
             Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.IsReachable(target, -1)),
             Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.ExclusiveIsolationBound(target, -1)),
             Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.IsIsolated(target, -1, BigRational.Zero)),
@@ -783,42 +738,6 @@ public class SurvivorSearchTests
 
         Assert.All(refusals, refusal => Assert.Equal("denominatorBound", refusal.ParamName));
         Assert.Single(refusals.Select(refusal => refusal.Message).Distinct());
-    }
-
-    [Fact]
-    public void Isolation_AtABoundTheTargetCannotReach_IsRefusedRatherThanAnsweredNo()
-    {
-        // Below the target's denominator the survivor set is empty, not crowded, so there is no
-        // true answer to "is it isolated". A no would report the crowded failure for the empty
-        // one, collapsing the two directions SPEC § 2 keeps apart.
-        string negativeMessage = Assert.Throws<ArgumentOutOfRangeException>(
-            () => SurvivorSearch.IsReachable(Ratio(6, 1), -1)).Message;
-
-        foreach ((BigRational target, BigInteger bound) in new (BigRational, BigInteger)[]
-        {
-            (Ratio(6, 1), 0),
-            (Ratio(7, 3), 2),
-            (new(325_641_566_250, 3617), 3616),
-        })
-        {
-            ArgumentOutOfRangeException fromBound = Assert.Throws<ArgumentOutOfRangeException>(
-                () => SurvivorSearch.ExclusiveIsolationBound(target, bound));
-            ArgumentOutOfRangeException fromPredicate = Assert.Throws<ArgumentOutOfRangeException>(
-                () => SurvivorSearch.IsIsolated(target, bound, BigRational.Zero));
-
-            Assert.Equal("denominatorBound", fromBound.ParamName);
-            Assert.Equal("denominatorBound", fromPredicate.ParamName);
-            Assert.NotEqual(negativeMessage, fromBound.Message);
-        }
-    }
-
-    [Fact]
-    public void IsIsolated_WithANegativeHalfWidth_Throws()
-    {
-        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => SurvivorSearch.IsIsolated(Ratio(7, 3), 5, Ratio(-1, 100)));
-
-        Assert.Equal("halfWidth", thrown.ParamName);
     }
 
     /// <summary>

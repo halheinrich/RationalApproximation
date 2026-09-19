@@ -318,8 +318,9 @@ looking at.
 
 Given enclosures of one unknown and a denominator bound `Q`, the rationals `p/q`
 in lowest terms with `q <= Q` that **every** enclosure contains. `SurvivorSearch`
-is the abstract base that states the contract; `DenominatorWalk` is its reference
-implementation.
+is the abstract base that states the contract, and it has two implementations,
+both public and chosen by the caller: `DenominatorWalk`, the reference, linear
+in `Q`; and `FareyWalk`, about `log Q` plus the survivors it finds.
 
 A candidate outside an enclosure of the unknown is not the unknown — permanently,
 whatever later enclosures do — so a refuted candidate never comes back and the
@@ -423,7 +424,9 @@ has to avoid is proposing one rational once per denominator that spells it. The
 scratchpad that dropped the greatest-common-divisor step reported 1500 survivors
 which were 1500 spellings of `6` — the pairs `(6q, q)` for `q` from 1 to 1500.
 Unlike `HeightSweep`'s identical-looking skip this one is load-bearing: nothing
-downstream filters, and removing it reddens thirteen tests.
+downstream filters, and removing it reddens twenty tests (measured 2026-09-18,
+260-test suite; one of the twenty is `FareyWalk`'s cross-check, which holds
+that walk to this one).
 
 **Seeded from the narrowest enclosure; decided against all of them.** One
 enclosure is enough to refute, so seeding the walk with the narrowest does nearly
@@ -451,9 +454,10 @@ table**, and for a different reason than `HeightSweep.BestDenominator`. The
 integers `p` with `lo <= p/q <= hi` are exactly those with `lo*q <= p <= hi*q`,
 so the range is a ceiling and a floor of exact rationals — but the *direction* is
 not what is load-bearing. A wider range is merely wasteful, since the extra
-candidate is put to the same membership test and dropped by the seed. Measured:
-replacing the ceiling with a nearest rounding reddens nothing, while a range one
-short reddens thirteen tests at the lower end and fourteen at the upper. The
+candidate is put to the same membership test and dropped by the seed. Measured
+2026-09-18 on the 260-test suite: replacing the ceiling with a nearest rounding
+reddens nothing, while a range one short reddens twenty-three tests at the lower
+end and twenty-four at the upper. The
 hazard is a **float** bound landing one short, not a wrong direction, and
 exactness is governed already.
 
@@ -462,6 +466,59 @@ so the exact range and the uniform membership test are **redundant with each
 other**. Removing both would look like one simplification and be two defects —
 the same pattern the reduced-pair skip above records, and the reason neither is
 described as an optimisation.
+
+#### `FareyWalk` — about `log Q` plus the survivors
+
+**Why it exists.** `DenominatorWalk`'s cost is linear in `Q`, so a time budget
+rather than precision capped what a ζ(odd) run could establish, at about
+`Q = 10^7` (`halheinrich/Math#79`). This walk lets precision alone set `Q`.
+
+**Three steps, all exact.** Intersect the enclosures to `[lo, hi]` — a rational
+lies in every closed interval exactly when it lies in their intersection — and
+stop if they cross or `Q` is zero. Bracket `lo` between consecutive Farey terms
+of order `Q`, `a/b < lo <= c/d`, by a Stern–Brocot descent that takes each run
+of moves to one side as a single batch; a batch consumes one term of `lo`'s
+continued fraction, so the descent is about `log Q` batches. Then yield `c/d` and
+step with the next-term recurrence, `k = floor((Q + b)/d)`, next
+`(kc − a)/(kd − b)`, while the term is at or below `hi`. The Farey facts are
+usually stated on `[0, 1]`; adding an integer maps the rationals of order `Q`
+onto themselves, so the walk runs on the whole line. Every floor and ceiling is
+a directed rounding of an exact rational.
+
+**Its order is strictly increasing value, and that is not simplest first.** At a
+large `Q` the leftmost survivor usually has a large denominator. Sorting into
+`DenominatorWalk`'s order would hold every survivor before yielding one, giving up
+the laziness and bounded memory the walk is for.
+
+**The bracket is an `internal` pure function**, on `HeightSweep.BestDenominator`'s
+precedent (§ Internal pattern: lift an unobservable decision into a pure
+function). Through `Survivors` a bracket that was merely close shows only as a
+survivor missing or extra at the lower end, so the tests hold `Bracket` to its
+certificate from the definition — `a/b < lo <= c/d`, `bc − ad = 1`, `b, d <= Q`,
+`b + d > Q` — and never through the recurrence that consumes it. Those four say
+the two are consecutive terms of order `Q`. The value on the right end counts as
+the right end's side, which is what makes `lo` itself the first survivor when it
+is a term.
+
+**Never its own oracle.** `BruteForce.SurvivorsByIntersection` shares its first
+step, the intersection, and not its enumeration; `DenominatorWalk` shares
+neither. It is cross-checked against both over a generated family — endpoints on
+small rationals and on integers, zero width, negative, straddling zero,
+disjoint, one to three enclosures — and runs the whole contract suite the
+reference does. A cost guard asks for `Q = 10^30` on a half-width of `1e-60`
+inside `BoundedSearch`'s budget, which a linear walk could not meet in `10^30`
+steps, so load cannot make it flaky; a laziness test takes the first survivors
+of `6 ± 1/10` at the same bound, of which there are on the order of `10^59`.
+
+**Most of its defects hang rather than answer wrongly**, so every call the tests
+make — `Bracket` included — runs under `BoundedSearch`. Measured by mutation
+2026-09-18, on the 260-test suite: each `k` in the descent one short, the right
+end's `k` one long, `lo` made exclusive, and the recurrence's floor made a
+ceiling each stop the walk making progress, and each was caught by the budget
+and by no assertion, the latch then failing the rest by design. The left end's
+`k` one long also fails three tests on their own assertions. `hi` made exclusive
+reddens nineteen, and intersecting only the narrowest enclosure reddens seven,
+among them the three-enclosure test.
 
 ### `AffineConstant` — the one combinator
 
@@ -560,7 +617,10 @@ tested, and an untestable decision is an undefended one. The remedy is a seam:
 split the decision out as a pure function and give the tests that, leaving the
 machinery around it unchanged. `HeightSweep.BestDenominator` is `internal` for
 exactly this reason — its tie rule has no observable effect on `Search`, so
-nothing short of holding the method could defend it.
+nothing short of holding the method could defend it. `FareyWalk.Bracket` is
+`internal` for a neighbouring one: its effect *is* observable, but only as one
+survivor too many or too few at an end, and its certificate is a property of
+two terms that no survivor list carries.
 
 **Third sighting of the same answer in this project.** `CLAUDE.md` § Shell
 records the first: three defects living behind a keypress were removed not by
@@ -723,14 +783,21 @@ public sealed class DenominatorWalk : SurvivorSearch
     // the reference, never optimised; nondecreasing denominator, increasing
     // value within one
 }
+
+public sealed class FareyWalk : SurvivorSearch
+{
+    // about log Q plus the survivors; strictly increasing value
+}
 ```
 
 A caller chooses a walk by constructing it and may hold it as a
-`SurvivorSearch`. `Survivors` throws `ArgumentNullException` on a null sequence,
-`ArgumentException` on an empty one, and `ArgumentOutOfRangeException` on a
-negative bound — all **at the call**, not at the first step, which is why the
-method is not itself an iterator. `enclosures` is read once and copied, so a
-lazy sequence is a fine argument and a later change to the source has no effect.
+`SurvivorSearch`; both return the same set, and differ in cost and order.
+`FareyWalk.Bracket` is `internal`, for the tests. `Survivors` throws
+`ArgumentNullException` on a null sequence, `ArgumentException` on an empty one,
+and `ArgumentOutOfRangeException` on a negative bound — all **at the call**, not
+at the first step, which is why the method is not itself an iterator.
+`enclosures` is read once and copied, so a lazy sequence is a fine argument and a
+later change to the source has no effect.
 A bound of zero yields nothing, a denominator being positive.
 
 All four members refuse a negative bound with the same
@@ -834,7 +901,20 @@ search yielded nothing, which only a defective approximator can do.
 - **Do not optimise `DenominatorWalk`.** It is what every other
   `SurvivorSearch` is checked against, so its cost is linear in `Q` on purpose
   and it stays trivially auditable. A faster walk is another implementation
-  beside it, never an edit to it.
+  beside it, never an edit to it — `FareyWalk` is that walk.
+- **The two walks' orders differ, and the first survivor means different things
+  under each.** `DenominatorWalk` yields simplest first, by denominator;
+  `FareyWalk` yields left to right, by value, so at a large `Q` its first survivor
+  usually has a large denominator. Against `6 ± 1/10` at `Q = 10` the reference
+  yields `6, 59/10, 61/10` and `FareyWalk` yields `59/10, 6, 61/10`. A caller
+  showing "the first few survivors" as the simplest must hold the reference, and
+  a caller that only needs the set should not care which it holds.
+- **`FareyWalk` is never its own oracle.** A test deriving an expectation from
+  the Farey recurrence agrees with any defect in it. Check `Bracket` against its
+  certificate from the definition and every result against `DenominatorWalk`,
+  which shares none of its steps; `BruteForce.SurvivorsByIntersection` shares
+  the intersection, so it cannot be the only check. A disagreement is fixed in
+  `FareyWalk`, never by moving the reference.
 - **The two searches' terminals are not interchangeable, and they diverge
   exactly where a reader is most likely to be watching.** `DenominatorSweep`
   stops at the least-**denominator** enclosed rational, `HeightSweep` at the
@@ -981,7 +1061,7 @@ search yielded nothing, which only a defective approximator can do.
 
 - **A logarithmic searcher behind `IRationalApproximator`**, validated against
   `DenominatorSweep` rather than replacing it. Entirely internal to this repo;
-  unscheduled.
+  unscheduled. It would share `FareyWalk.Bracket`.
 - **The trend types' shape was a proposal**, not an implementation of a ratified
   contract — the spec fixed the matrix's *content*, not its API. If that
   contract list is ever extended, this surface is what it reconciles against.

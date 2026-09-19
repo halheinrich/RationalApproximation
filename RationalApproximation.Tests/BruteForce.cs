@@ -95,19 +95,28 @@ internal static class BruteForce
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The oracle for <see cref="SurvivorSearch"/>, and independent of it in both steps that could
-    /// go wrong. It never asks which enclosure is narrowest - a rational lies in every closed
-    /// interval exactly when it lies in their intersection, so the enclosures collapse to one pair
-    /// of endpoints before any candidate exists, and no candidate is ever put to an individual
-    /// enclosure. And it does no reduction test: every pair in range is handed to
-    /// <see cref="BigRational"/>, whose own lowest-terms invariant is what collapses <c>12/2</c>
-    /// onto <c>6/1</c>, so a set built this way cannot inherit a defect in the search's
-    /// greatest-common-divisor skip.
+    /// The oracle for every <see cref="SurvivorSearch"/>. Against <see cref="DenominatorWalk"/> it
+    /// is independent in both steps that could go wrong. It never asks which enclosure is
+    /// narrowest - a rational lies in every closed interval exactly when it lies in their
+    /// intersection, so the enclosures collapse to one pair of endpoints before any candidate
+    /// exists, and no candidate is ever put to an individual enclosure. And it does no reduction
+    /// test: every pair in range is handed to <see cref="BigRational"/>, whose own lowest-terms
+    /// invariant is what collapses <c>12/2</c> onto <c>6/1</c>, so a set built this way cannot
+    /// inherit a defect in that walk's greatest-common-divisor skip.
     /// </para>
     /// <para>
-    /// The result is ordered by value, which is <b>not</b> the order the search promises. That is
-    /// deliberate: this answers "which rationals" and the search's ordering is asserted separately,
-    /// so a test comparing the two cannot accidentally pass on order alone.
+    /// Against <see cref="FareyWalk"/> it is independent in one step only. That walk intersects
+    /// first too, and shares nothing after it: it enumerates by the Farey recurrence where this
+    /// enumerates every numerator of every denominator. So a defect in the intersection could be
+    /// mirrored here, which is why that walk is also held to <see cref="DenominatorWalk"/>, which
+    /// shares neither step.
+    /// </para>
+    /// <para>
+    /// The result is ordered by value. That is <b>not</b> <see cref="DenominatorWalk"/>'s order, so a
+    /// test comparing the reference against this cannot accidentally pass on order alone. It
+    /// <i>is</i> <see cref="FareyWalk"/>'s order, so a comparison with that walk checks its order
+    /// along with its answer - and a comparison that sorts first cannot tell that walk's order
+    /// right from wrong, which is why its order has its own test.
     /// </para>
     /// </remarks>
     public static List<BigRational> SurvivorsByIntersection(
