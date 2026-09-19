@@ -5,7 +5,8 @@ namespace HalHeinrich.Numerics;
 
 /// <summary>
 /// The rationals a set of enclosures leaves standing: every <c>p/q</c> in lowest terms whose
-/// denominator is at or below a given bound and which every one of the enclosures contains.
+/// denominator is at or below a given bound and which every one of the enclosures contains. The
+/// base of a closed set of walks that find them; <see cref="DenominatorWalk"/> is the reference.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -24,8 +25,22 @@ namespace HalHeinrich.Numerics;
 /// implementation to be lazy, strictly improving, of increasing height, and terminating on
 /// enclosure. This contract keeps only the first of those: many enclosures rather than one, no
 /// ordering by distance or by height, and everything still standing rather than the first hit.
-/// Claiming the kinship would make the compiler accept callers that cannot be correct. Whether
-/// this deserves an interface of its own is a question for a second implementation.
+/// Claiming the kinship would make the compiler accept callers that cannot be correct.
+/// </para>
+/// <para>
+/// <b>An abstract base rather than an interface</b>, which is where this type departs from
+/// <see cref="IRationalApproximator"/>. Two reasons, and neither applies there. The eager
+/// validation of <see cref="Survivors"/> - null, empty and negative-bound refusals at the call,
+/// the enclosures read once and copied - is contract, not courtesy: an implementation skipping it
+/// would report an argument fault at some later <c>foreach</c>, or complete refutation from no
+/// evidence. On an interface every implementation would restate it and could omit it; here it is
+/// written once, in a member no implementation can override. And the constructor is
+/// <c>private protected</c>, so the implementations are exactly the ones this assembly declares.
+/// That closed set is what makes "every <see cref="SurvivorSearch"/> is cross-checked against the
+/// reference" a true sentence rather than a hope about code not yet written.
+/// <see cref="IRationalApproximator"/> has no argument to validate, since every enclosure is a
+/// valid one; and its openness is used, since the test harness wraps an implementation in a
+/// budgeted decorator, which a closed type would forbid.
 /// </para>
 /// <para>
 /// <b>The element type is <see cref="BigRational"/> and not <see cref="RationalCandidate"/>.</b> A
@@ -33,14 +48,9 @@ namespace HalHeinrich.Numerics;
 /// <see cref="RationalCandidate.IsEnclosed"/>, <see cref="RationalCandidate.MinDistance"/> and
 /// <see cref="RationalCandidate.MaxDistance"/> are all relative to that one enclosure. Returned
 /// from a search over many it would carry a property that reads as "survives" and does not mean
-/// it. A caller wanting distances holds the enclosures already.
-/// </para>
-/// <para>
-/// <b>Canonical form is not a call-site convention here.</b> <see cref="BigRational"/> is always
-/// in lowest terms with a positive denominator, so no survivor can be a mis-spelling of another;
-/// what the enumeration has to avoid is proposing the same rational twice, once per denominator
-/// that spells it. A scratchpad that skipped that step reported 1500 survivors which were 1500
-/// spellings of <c>6</c> - the pairs <c>(6q, q)</c> for <c>q</c> from 1 to 1500.
+/// it. A caller wanting distances holds the enclosures already. Canonical form is therefore not a
+/// call-site convention: <see cref="BigRational"/> is always in lowest terms with a positive
+/// denominator, so no survivor can be a mis-spelling of another.
 /// </para>
 /// <para>
 /// <b>It also carries the two rules that say when a known rational target survives alone</b> -
@@ -53,7 +63,7 @@ namespace HalHeinrich.Numerics;
 /// yes-or-no would fold them back into the one rule they were once misread as.
 /// </para>
 /// </remarks>
-public static class SurvivorSearch
+public abstract class SurvivorSearch
 {
     private const string NoEnclosuresMessage =
         "A survivor search needs at least one enclosure. With none, nothing is refuted and every " +
@@ -78,6 +88,14 @@ public static class SurvivorSearch
         "exact enclosure holds only its own value.";
 
     /// <summary>
+    /// Admits implementations from this assembly only, so the set of walks is the closed one the
+    /// type's remarks rely on.
+    /// </summary>
+    private protected SurvivorSearch()
+    {
+    }
+
+    /// <summary>
     /// Finds the rationals of bounded denominator that none of the given enclosures excludes.
     /// </summary>
     /// <param name="enclosures">
@@ -90,26 +108,23 @@ public static class SurvivorSearch
     /// <returns>
     /// A lazy sequence of every <c>p/q</c> in lowest terms with <c>q</c> at or below
     /// <paramref name="denominatorBound"/> that lies inside every enclosure, each yielded exactly
-    /// once.
+    /// once, in the order the implementation states.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="enclosures"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="enclosures"/> holds no enclosure.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="denominatorBound"/> is negative.</exception>
     /// <remarks>
     /// <para>
-    /// <b>Ordering is promised: nondecreasing denominator, and increasing value within one
-    /// denominator.</b> It is what the enumeration produces anyway, so it costs nothing, and it
-    /// puts the simplest survivor first - which is the one a reader cares about, and the one a
-    /// caller who only wants to know whether anything survives can stop at.
+    /// <b>This base promises no order.</b> Each implementation states its own, and a caller that
+    /// depends on one holds that implementation. It is the position <c>SPEC-rational-ratio.md</c>
+    /// § 3 takes on <see cref="IRationalApproximator"/>, whose terminal belongs to the
+    /// implementation's order and not to the interface - and for the same reason: the set is the
+    /// claim, and an order is a property of the walk that produced it.
     /// </para>
     /// <para>
-    /// <b>That is not height order</b>, and the difference shows up inside a single denominator
-    /// rather than across them. An enclosure of <c>1 +/- 4</c> holds nine integers, so the first
-    /// yielded is <c>-3/1</c> at height 3 while the <c>0/1</c> it also holds has height 1. Across
-    /// denominators the two orders do agree for a narrow enclosure, since a rational near a fixed
-    /// target has its height grow with its denominator, but that is a property of the enclosure
-    /// and not a promise of this method. A caller wanting least height wants
-    /// <see cref="HeightSweep"/>, which is the type that exists to make the distinction.
+    /// <b>Lazy</b>, so the survivors are yielded as they are found and a caller who only wants to
+    /// know whether anything survives can stop at the first. A caller who wants them as a
+    /// collection materialises the sequence itself.
     /// </para>
     /// <para>
     /// <b>An empty <paramref name="enclosures"/> throws rather than returning nothing.</b> Nothing
@@ -119,34 +134,8 @@ public static class SurvivorSearch
     /// forbids exactly that direction of error, and it is the direction every choice here leans
     /// against.
     /// </para>
-    /// <para>
-    /// <b>Enumeration runs against the narrowest enclosure; membership is decided against all of
-    /// them.</b> One enclosure is enough to refute, so seeding the walk with the narrowest does
-    /// nearly all the work for one enclosure's cost. The seed is a <i>cost</i> choice and not a
-    /// correctness one - any of the enclosures would give the same answer, because a candidate the
-    /// seed rejects is refuted by the seed and so is no survivor either way. Intersecting is still
-    /// strictly stronger than filtering on any one of them, because enclosures need not nest: two
-    /// of half-width <c>1/10</c> centred on <c>6</c> and on <c>61/10</c> admit seven candidates of
-    /// denominator at or below 10 between them and share only two. This is why the seed is not
-    /// documented as "the last" or "the best" enclosure: there is no such thing here.
-    /// </para>
-    /// <para>
-    /// <b>The candidate space is never materialised.</b> Candidates are walked one at a time and
-    /// dropped at the first enclosure that excludes them, so the reachable bound is limited by
-    /// time and not by memory - the obvious implementation, which collects the candidates and then
-    /// filters, exhausted memory when this arc's own sizing was first measured. The survivors are
-    /// yielded as they are found and are usually a handful; a caller who wants them as a
-    /// collection materialises the sequence itself.
-    /// </para>
-    /// <para>
-    /// <b>Every arithmetic step deciding a candidate's fate is exact.</b> The numerators to try at
-    /// each denominator come from directed rounding of exact rationals, and membership is
-    /// <see cref="Approximation.Contains"/>, which compares <see cref="BigRational"/> values. A
-    /// floating-point range bound that landed one short would drop a candidate silently, which is
-    /// again an overstatement of refutation rather than an understatement.
-    /// </para>
     /// </remarks>
-    public static IEnumerable<BigRational> Survivors(
+    public IEnumerable<BigRational> Survivors(
         IEnumerable<Approximation> enclosures,
         BigInteger denominatorBound)
     {
@@ -346,97 +335,15 @@ public static class SurvivorSearch
         }
     }
 
-    /// <summary>The walk itself, over pre-validated arguments.</summary>
-    private static IEnumerable<BigRational> Enumerate(
-        Approximation[] enclosures,
-        BigInteger denominatorBound)
-    {
-        Approximation seed = Narrowest(enclosures);
-
-        for (BigInteger denominator = BigInteger.One; denominator <= denominatorBound; denominator++)
-        {
-            // The integers p with lo <= p/q <= hi are exactly those with lo*q <= p <= hi*q, so the
-            // range is a ceiling and a floor of exact rationals - the definition of "which
-            // integers are in this interval", not an approximation of it.
-            //
-            // This is NOT a third entry in INSTRUCTIONS.md's rounding table, because the direction
-            // is not what is load-bearing. A wider range is merely wasteful: an extra candidate is
-            // put to SurvivesAll, which tests the seed along with every other enclosure and drops
-            // it. What must not happen is a range one short, and the way to get one short is a
-            // float bound rather than a wrong direction - so the discipline here is exactness,
-            // which AGENTS.md governs already.
-            //
-            // That safety is the seed being re-tested below rather than assumed, so this exact
-            // range and that uniform test are redundant with each other. Dropping both would look
-            // like one simplification and be two defects.
-            BigInteger smallest = BigRational.Round(
-                seed.Lower * denominator,
-                MidpointRounding.ToPositiveInfinity);
-
-            BigInteger largest = BigRational.Round(
-                seed.Upper * denominator,
-                MidpointRounding.ToNegativeInfinity);
-
-            for (BigInteger numerator = smallest; numerator <= largest; numerator++)
-            {
-                // Skip a pair not already in lowest terms, so 12/2 never re-proposes 6/1. Unlike
-                // HeightSweep's identical-looking skip this one is load-bearing: nothing
-                // downstream filters, so without it a survivor is reported once per denominator
-                // that spells it.
-                if (BigInteger.GreatestCommonDivisor(BigInteger.Abs(numerator), denominator)
-                    != BigInteger.One)
-                {
-                    continue;
-                }
-
-                BigRational candidate = new(numerator, denominator);
-                if (SurvivesAll(candidate, enclosures))
-                {
-                    yield return candidate;
-                }
-            }
-        }
-    }
-
-    /// <summary>Determines whether every enclosure permits the unknown to be this rational.</summary>
-    /// <remarks>
-    /// Stops at the first enclosure that excludes the candidate. Which one that is carries no
-    /// weight - one refutation is a proof and a second adds nothing to it - so the index is not
-    /// reported.
-    /// </remarks>
-    private static bool SurvivesAll(BigRational candidate, Approximation[] enclosures)
-    {
-        foreach (Approximation enclosure in enclosures)
-        {
-            if (!enclosure.Contains(candidate))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     /// <summary>
-    /// Picks the enclosure with the least <see cref="Approximation.MaxError"/>, which is the one
-    /// admitting the fewest candidates per denominator.
+    /// The walk itself, over the arguments <see cref="Survivors"/> has already validated and copied.
     /// </summary>
-    /// <remarks>
-    /// Ties go to the first, and the choice is unobservable: the answer is the intersection over
-    /// every enclosure whichever one seeds the walk.
-    /// </remarks>
-    private static Approximation Narrowest(Approximation[] enclosures)
-    {
-        Approximation narrowest = enclosures[0];
-
-        foreach (Approximation enclosure in enclosures)
-        {
-            if (enclosure.MaxError < narrowest.MaxError)
-            {
-                narrowest = enclosure;
-            }
-        }
-
-        return narrowest;
-    }
+    /// <param name="enclosures">The caller's enclosures, copied and owned by this call; never empty.</param>
+    /// <param name="denominatorBound">The largest denominator to consider; never negative.</param>
+    /// <returns>
+    /// The survivors, lazily and each exactly once, in the order the implementation states.
+    /// </returns>
+    private protected abstract IEnumerable<BigRational> Enumerate(
+        Approximation[] enclosures,
+        BigInteger denominatorBound);
 }

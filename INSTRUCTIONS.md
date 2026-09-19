@@ -314,10 +314,12 @@ caller may pass every improvement a search yielded, or add controls it wants
 watched. Encoding a policy here would be this layer deciding what is worth
 looking at.
 
-### `SurvivorSearch` — refutation as a proof, not a trend
+### `SurvivorSearch` and its walks — refutation as a proof, not a trend
 
 Given enclosures of one unknown and a denominator bound `Q`, the rationals `p/q`
-in lowest terms with `q <= Q` that **every** enclosure contains.
+in lowest terms with `q <= Q` that **every** enclosure contains. `SurvivorSearch`
+is the abstract base that states the contract; `DenominatorWalk` is its reference
+implementation.
 
 A candidate outside an enclosure of the unknown is not the unknown — permanently,
 whatever later enclosures do — so a refuted candidate never comes back and the
@@ -333,49 +335,37 @@ interface obliges an implementation to be lazy, strictly improving, of increasin
 height, and terminating on enclosure; this contract keeps only the first. Many
 enclosures rather than one, no ordering by distance or by height, and everything
 still standing rather than the first hit. `Sweep` is likewise absent from the
-name, because both types carrying it implement the interface this one does not.
-Whether the contract deserves an interface of its own is a question for a second
-implementation.
+names, because both types carrying it implement the interface this one does not.
+
+**An abstract base with a closed set of implementations, not an interface** —
+the question the type deferred to a second implementation, answered, and a
+departure from `IRationalApproximator`, which is an interface. `Survivors` is
+public and non-virtual: it refuses a null, an empty set and a negative bound at
+the call, copies the enclosures once, and only then hands them to a
+`private protected abstract` walk. The constructor is `private protected` too, so
+only this assembly can implement the type. Two reasons. The eager validation is
+contract — skipping it reports an argument fault at a later `foreach`, or total
+refutation from no evidence — so it is written once where no implementation can
+omit it. And the closed set is what makes "every `SurvivorSearch` is
+cross-checked against the reference" true of code not yet written. Neither
+reason reaches `IRationalApproximator`: every enclosure is a valid argument, so
+it has nothing to validate, and its openness is used, since
+`BoundedSearch.Budgeted` wraps an implementation.
+
+**The base promises every survivor exactly once and no order**; each
+implementation states its own. That is `../SPEC-rational-ratio.md` § 3's position
+on `IRationalApproximator`, whose terminal belongs to the implementation's order
+and not to the interface. The result is lazy, so a caller may stop at the first
+survivor. Argument validation is therefore eager while enumeration is deferred,
+which a single iterator method cannot do: its body does not run until the first
+`MoveNext`, so an argument fault would surface at some later `foreach` with
+nothing left to say which call caused it.
 
 **The element type is `BigRational` and not `RationalCandidate`.** A candidate
 binds a value to the *one* enclosure it was judged against, so `IsEnclosed`,
 `MinDistance` and `MaxDistance` all read off that single enclosure. Returned from
 a search over many it would carry a property that reads as "survives" and does
 not mean it. A caller wanting distances holds the enclosures already.
-
-**Canonical form, and what it actually costs here.** `BigRational` is always in
-lowest terms, so no survivor can be a *mis-spelling* of another; what the walk
-has to avoid is proposing one rational once per denominator that spells it. The
-scratchpad that dropped the greatest-common-divisor step reported 1500 survivors
-which were 1500 spellings of `6` — the pairs `(6q, q)` for `q` from 1 to 1500.
-Unlike `HeightSweep`'s identical-looking skip this one is load-bearing: nothing
-downstream filters, and removing it reddens thirteen tests.
-
-**Seeded from the narrowest enclosure; decided against all of them.** One
-enclosure is enough to refute, so seeding the walk with the narrowest does nearly
-all the work for one enclosure's cost. The seed is a **cost** choice and not a
-correctness one — any enclosure gives the same answer, because a candidate the
-seed rejects is refuted by the seed — and the mutant that seeds from the *widest*
-correspondingly reddens nothing. Intersecting is still strictly stronger than
-filtering on any one of them, since enclosures do not nest: two of half-width
-`1/10` centred on `6` and on `61/10` admit seven candidates of denominator at or
-below 10 between them and share only two.
-
-**The candidate space is never materialised**, which is why the reachable bound
-is limited by time and not by memory: candidates are walked one at a time and
-dropped at the first enclosure that excludes them. The *result* is lazy for the
-same reason, and that buys a property an eager one could not — a caller may stop
-at the first survivor. Argument validation is therefore eager while enumeration
-is deferred, which a single iterator method cannot do: its body does not run
-until the first `MoveNext`, so an argument fault would surface at some later
-`foreach` with nothing left to say which call caused it.
-
-**Ordering is promised: nondecreasing denominator, increasing value within one.**
-It is what the walk produces anyway, so it costs nothing. It is **not** height
-order, and the difference shows up inside a single denominator rather than across
-them: `1 ± 4` holds nine integers, so the first yielded is `-3/1` at height 3
-while the `0/1` it also holds has height 1. A caller wanting least height wants
-`HeightSweep`.
 
 **An empty enclosure set throws.** Nothing refutes, so every rational within the
 bound survives — infinitely many, the numerator being unbounded — and an empty
@@ -384,23 +374,6 @@ result would report complete refutation from no evidence, the direction
 `Q = 0` yielding nothing is the other empty result and means "nothing was
 examined". The two are indistinguishable in the value and are told apart only by
 the bound reported beside it.
-
-**The per-denominator integer range is a rounding site that does not join the
-table**, and for a different reason than `HeightSweep.BestDenominator`. The
-integers `p` with `lo <= p/q <= hi` are exactly those with `lo*q <= p <= hi*q`,
-so the range is a ceiling and a floor of exact rationals — but the *direction* is
-not what is load-bearing. A wider range is merely wasteful, since the extra
-candidate is put to the same membership test and dropped by the seed. Measured:
-replacing the ceiling with a nearest rounding reddens nothing, while a range one
-short reddens thirteen tests at the lower end and fourteen at the upper. The
-hazard is a **float** bound landing one short, not a wrong direction, and
-exactness is governed already.
-
-That safety comes from the seed being re-tested alongside every other enclosure,
-so the exact range and the uniform membership test are **redundant with each
-other**. Removing both would look like one simplification and be two defects —
-the same pattern the reduced-pair skip above records, and the reason neither is
-described as an optimisation.
 
 **It implements `../SPEC-rational-ratio.md` § 2's two rational-target rules,
 once** — `IsReachable`, and `IsIsolated` with `ExclusiveIsolationBound` the
@@ -436,6 +409,59 @@ prose; squaring it reddens that congruence test alone; `<=` for the predicate's
 `<` reddens four, as does `>` for reachability's `>=`; deleting the reachability
 refusal does not compile (`CA1823`), and narrowing it to refuse only a bound of
 zero reddens the refusal test alone.
+
+#### `DenominatorWalk` — the reference
+
+**Never optimised.** It walks every denominator from 1 to `Q`, so it is linear in
+`Q`, and that is its point: its only product is being an oracle nobody has to
+argue about (`../AGENTS.md` § Exactness discipline). A faster walk is another
+implementation beside it, never a change to it.
+
+**Canonical form, and what it actually costs here.** `BigRational` is always in
+lowest terms, so no survivor can be a *mis-spelling* of another; what the walk
+has to avoid is proposing one rational once per denominator that spells it. The
+scratchpad that dropped the greatest-common-divisor step reported 1500 survivors
+which were 1500 spellings of `6` — the pairs `(6q, q)` for `q` from 1 to 1500.
+Unlike `HeightSweep`'s identical-looking skip this one is load-bearing: nothing
+downstream filters, and removing it reddens thirteen tests.
+
+**Seeded from the narrowest enclosure; decided against all of them.** One
+enclosure is enough to refute, so seeding the walk with the narrowest does nearly
+all the work for one enclosure's cost. The seed is a **cost** choice and not a
+correctness one — any enclosure gives the same answer, because a candidate the
+seed rejects is refuted by the seed — and the mutant that seeds from the *widest*
+correspondingly reddens nothing. Intersecting is still strictly stronger than
+filtering on any one of them, since enclosures do not nest: two of half-width
+`1/10` centred on `6` and on `61/10` admit seven candidates of denominator at or
+below 10 between them and share only two.
+
+**The candidate space is never materialised**, which is why the reachable bound
+is limited by time and not by memory: candidates are walked one at a time and
+dropped at the first enclosure that excludes them.
+
+**Its order: nondecreasing denominator, increasing value within one.**
+It is what the walk produces anyway, so it costs nothing. It is **not** height
+order, and the difference shows up inside a single denominator rather than across
+them: `1 ± 4` holds nine integers, so the first yielded is `-3/1` at height 3
+while the `0/1` it also holds has height 1. A caller wanting least height wants
+`HeightSweep`.
+
+**The per-denominator integer range is a rounding site that does not join the
+table**, and for a different reason than `HeightSweep.BestDenominator`. The
+integers `p` with `lo <= p/q <= hi` are exactly those with `lo*q <= p <= hi*q`,
+so the range is a ceiling and a floor of exact rationals — but the *direction* is
+not what is load-bearing. A wider range is merely wasteful, since the extra
+candidate is put to the same membership test and dropped by the seed. Measured:
+replacing the ceiling with a nearest rounding reddens nothing, while a range one
+short reddens thirteen tests at the lower end and fourteen at the upper. The
+hazard is a **float** bound landing one short, not a wrong direction, and
+exactness is governed already.
+
+That safety comes from the seed being re-tested alongside every other enclosure,
+so the exact range and the uniform membership test are **redundant with each
+other**. Removing both would look like one simplification and be two defects —
+the same pattern the reduced-pair skip above records, and the reason neither is
+described as an optimisation.
 
 ### `AffineConstant` — the one combinator
 
@@ -677,11 +703,10 @@ copies its input so a later change to the source has no effect. A run with no
 iterations yields an empty matrix, which is honestly empty rather than an error.
 
 ```csharp
-public static class SurvivorSearch
+public abstract class SurvivorSearch    // implementable only in this assembly
 {
-    // lazy; nondecreasing denominator, increasing value within one; each
-    // survivor yielded exactly once
-    public static IEnumerable<BigRational> Survivors(
+    // lazy; each survivor yielded exactly once; no order - each walk states its own
+    public IEnumerable<BigRational> Survivors(
         IEnumerable<Approximation> enclosures, BigInteger denominatorBound);
 
     // SPEC § 2's rational-target rules; the spec states them, these implement them
@@ -692,9 +717,16 @@ public static class SurvivorSearch
     public static bool IsIsolated(
         BigRational target, BigInteger denominatorBound, BigRational halfWidth);
 }
+
+public sealed class DenominatorWalk : SurvivorSearch
+{
+    // the reference, never optimised; nondecreasing denominator, increasing
+    // value within one
+}
 ```
 
-`Survivors` throws `ArgumentNullException` on a null sequence,
+A caller chooses a walk by constructing it and may hold it as a
+`SurvivorSearch`. `Survivors` throws `ArgumentNullException` on a null sequence,
 `ArgumentException` on an empty one, and `ArgumentOutOfRangeException` on a
 negative bound — all **at the call**, not at the first step, which is why the
 method is not itself an iterator. `enclosures` is read once and copied, so a
@@ -799,6 +831,10 @@ search yielded nothing, which only a defective approximator can do.
   factor of the target's magnitude, on purpose. Neither loop is unbounded for
   want of a bound — see § Architecture; a cap is a caller's budget and neither
   type takes one.
+- **Do not optimise `DenominatorWalk`.** It is what every other
+  `SurvivorSearch` is checked against, so its cost is linear in `Q` on purpose
+  and it stays trivially auditable. A faster walk is another implementation
+  beside it, never an edit to it.
 - **The two searches' terminals are not interchangeable, and they diverge
   exactly where a reader is most likely to be watching.** `DenominatorSweep`
   stops at the least-**denominator** enclosed rational, `HeightSweep` at the
@@ -828,7 +864,7 @@ search yielded nothing, which only a defective approximator can do.
   becomes undefended, and **nothing goes red**. Deleting the rule instead is also
   wrong: an oracle must be deterministic whether or not you can watch it choose.
 - **Do not decide a survivor on one enclosure — and do not trust a
-  two-enclosure fixture to catch it if you do.** `SurvivorSearch` seeds its walk
+  two-enclosure fixture to catch it if you do.** `DenominatorWalk` seeds its walk
   from the *narrowest* enclosure, so with only two of them a mutant deciding
   membership on "the last" has already been filtered by the seed and returns the
   right answer anyway. Fixture C, the non-nesting pair this type's brief singled
@@ -840,10 +876,11 @@ search yielded nothing, which only a defective approximator can do.
   Measured 2026-09-08 by that type's own mutation run, and the general shape is
   worth carrying: a fixture chosen to exhibit a property can still be too small
   to distinguish the mechanism from a cheaper wrong one beside it.
-- **`SurvivorSearch` must not be made an `IRationalApproximator`,** nor renamed
-  to carry `Sweep`. It differs in every obligation that interface imposes but
-  laziness — see § Architecture — and declaring the kinship, in the type list or
-  in the name, would make the compiler accept callers that cannot be correct.
+- **`SurvivorSearch` must not be made an `IRationalApproximator`,** nor it or a
+  walk renamed to carry `Sweep`. It differs in every obligation that interface
+  imposes but laziness — see § Architecture — and declaring the kinship, in the
+  type list or in the name, would make the compiler accept callers that cannot
+  be correct.
 - **An empty survivor set means two different things,** and only the bound
   reported beside it tells them apart. Against the exact enclosure on `1/7` a
   bound of 6 yields nothing because the one rational that enclosure holds has a

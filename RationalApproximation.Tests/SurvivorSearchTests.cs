@@ -11,6 +11,9 @@ namespace HalHeinrich.Numerics.Tests;
 /// </summary>
 public class SurvivorSearchTests
 {
+    /// <summary>The walk under test, and the only implementation there is.</summary>
+    private static readonly DenominatorWalk Walk = new();
+
     /// <summary>
     /// Enclosure sets spanning the shapes that change the answer, each with the denominator bound
     /// it is searched under: one enclosure and several, nesting and not, wide and exact, positive
@@ -41,7 +44,7 @@ public class SurvivorSearchTests
     /// <summary>Runs a search to completion under the shared budget. Reasoning in <see cref="BoundedSearch"/>.</summary>
     private static List<BigRational> Run(IEnumerable<Approximation> enclosures, BigInteger denominatorBound) =>
         BoundedSearch.CompleteWithin(
-            () => new List<BigRational>(SurvivorSearch.Survivors(enclosures, denominatorBound)),
+            () => new List<BigRational>(Walk.Survivors(enclosures, denominatorBound)),
             Inv($"A survivor search to denominator {denominatorBound}"));
 
     // ---------- the four fixtures, computed by hand ----------
@@ -284,7 +287,7 @@ public class SurvivorSearchTests
         BigInteger bound = BigInteger.Pow(10, 30);
 
         List<BigRational> first = BoundedSearch.CompleteWithin(
-            () => new List<BigRational>(SurvivorSearch.Survivors([Enclosure(6, 1, 1, 10)], bound).Take(3)),
+            () => new List<BigRational>(Walk.Survivors([Enclosure(6, 1, 1, 10)], bound).Take(3)),
             "A truncated survivor search");
 
         Assert.Equal(new[] { Ratio(6, 1), Ratio(59, 10), Ratio(61, 10) }, first);
@@ -311,7 +314,7 @@ public class SurvivorSearchTests
         // them, the numerator being unbounded. An empty result would say the opposite of the
         // truth, and it is the direction AGENTS.md's report-the-bound rule forbids.
         ArgumentException thrown = Assert.Throws<ArgumentException>(
-            () => SurvivorSearch.Survivors([], 10));
+            () => Walk.Survivors([], 10));
 
         Assert.Equal("enclosures", thrown.ParamName);
     }
@@ -322,14 +325,14 @@ public class SurvivorSearchTests
         // Not merely that it throws, but that it throws here. An iterator method defers its whole
         // body to the first MoveNext, which would surface an argument fault at some later foreach
         // with nothing left to say which call caused it.
-        Assert.Throws<ArgumentNullException>(() => SurvivorSearch.Survivors(null!, 10));
+        Assert.Throws<ArgumentNullException>(() => Walk.Survivors(null!, 10));
     }
 
     [Fact]
     public void Survivors_WithANegativeBound_ThrowAtTheCall()
     {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => SurvivorSearch.Survivors([Enclosure(6, 1, 1, 10)], -1));
+            () => Walk.Survivors([Enclosure(6, 1, 1, 10)], -1));
 
         Assert.Equal("denominatorBound", thrown.ParamName);
     }
@@ -772,7 +775,7 @@ public class SurvivorSearchTests
 
         ArgumentOutOfRangeException[] refusals =
         [
-            Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.Survivors([Enclosure(6, 1, 1, 10)], -1)),
+            Assert.Throws<ArgumentOutOfRangeException>(() => Walk.Survivors([Enclosure(6, 1, 1, 10)], -1)),
             Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.IsReachable(target, -1)),
             Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.ExclusiveIsolationBound(target, -1)),
             Assert.Throws<ArgumentOutOfRangeException>(() => SurvivorSearch.IsIsolated(target, -1, BigRational.Zero)),
