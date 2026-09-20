@@ -124,10 +124,9 @@ public sealed class ConstantRun
     /// </exception>
     /// <remarks>
     /// <para>
-    /// The schedule of targets is the caller's, deliberately. How far a run should go, and in how
-    /// many columns, is a property of the question being asked rather than of the pipeline; what is
-    /// fixed is that the run is driven to a <i>fixed</i> target rather than stopped on what the
-    /// output looks like.
+    /// <b>How a run is sized is not this type's to state.</b> <c>SPEC-rational-ratio.md</c> § 2,
+    /// "Sizing a run", owns who chooses the schedule of targets and what a run is driven to; it is
+    /// not restated here. <paramref name="targetErrors"/> is that schedule.
     /// </para>
     /// <para>
     /// <b>One refinement sequence is held across the whole schedule and advanced.</b> The cost of
