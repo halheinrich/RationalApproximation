@@ -63,8 +63,8 @@ public sealed class ConstantIteration
     /// <remarks>
     /// All of them, not just the terminating one. Each is a strict improvement on its predecessor,
     /// and the early low-height ones are exactly the rows a plateau is read from across the whole
-    /// run - a matrix row is dense, so a candidate first surfaced late still carries a distance for
-    /// every earlier column.
+    /// run. What a row holds for the columns before the candidate surfaced is
+    /// <see cref="TrendRow"/>'s to state; it is not restated here.
     /// </remarks>
     public IReadOnlyList<RationalCandidate> Candidates => Trend.Candidates;
 
